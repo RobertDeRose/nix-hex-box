@@ -104,24 +104,24 @@ let
   readinessScript = pkgs.writeShellScript "container-builder-readiness" ''
     set -euo pipefail
 
-    host=${escapeShellArg cfg.listenAddress}
-    port=${escapeShellArg (toString cfg.port)}
+    host_alias=${escapeShellArg cfg.hostAlias}
+    ssh_config=${escapeShellArg "${workDir}/ssh_config_root"}
     timeout_seconds=${escapeShellArg (toString cfg.readiness.timeoutSeconds)}
     interval_seconds=${escapeShellArg (toString cfg.readiness.intervalSeconds)}
     deadline=$(( $(/bin/date +%s) + timeout_seconds ))
 
-    echo "[$(/bin/date)] waiting for SSH on $host:$port"
+    echo "[$(/bin/date)] waiting for SSH readiness on $host_alias"
 
     while [ "$(( $(/bin/date +%s) ))" -lt "$deadline" ]; do
-      if ${pkgs.netcat}/bin/nc -z "$host" "$port" >/dev/null 2>&1; then
-        echo "[$(/bin/date)] SSH port is reachable on $host:$port"
+      if /usr/bin/ssh -F "$ssh_config" -o BatchMode=yes -o ConnectTimeout=2 "$host_alias" true >/dev/null 2>&1; then
+        echo "[$(/bin/date)] SSH is ready on $host_alias"
         exit 0
       fi
 
       /bin/sleep "$interval_seconds"
     done
 
-    echo "[$(/bin/date)] timed out waiting for SSH on $host:$port" >&2
+    echo "[$(/bin/date)] timed out waiting for SSH readiness on $host_alias" >&2
     exit 1
   '';
 
@@ -202,6 +202,31 @@ let
     exec ${escapeShellArg cfg.containerBinary} rm -f ${escapeShellArg cfg.containerName}
   '';
 
+  verifyScript = pkgs.writeShellScript "container-builder-verify" ''
+    set -euo pipefail
+
+    host_alias=${escapeShellArg cfg.hostAlias}
+    ssh_config=${escapeShellArg "${workDir}/ssh_config_root"}
+    container_bin=${escapeShellArg cfg.containerBinary}
+
+    printf '==> container system status\n'
+    "$container_bin" system status || exit 1
+
+    printf '\n==> SSH handshake\n'
+    /usr/bin/ssh -F "$ssh_config" -o BatchMode=yes "$host_alias" true
+
+    printf '\n==> DNS lookup inside builder\n'
+    /usr/bin/ssh -F "$ssh_config" -o BatchMode=yes "$host_alias" 'getent hosts cache.nixos.org'
+
+    printf '\n==> Nix cache reachability inside builder\n'
+    /usr/bin/ssh -F "$ssh_config" -o BatchMode=yes "$host_alias" 'nix store ping --store https://cache.nixos.org'
+
+    printf '\n==> Remote store ping via ssh-ng\n'
+    nix store ping --store ${escapeShellArg "${cfg.protocol}://${cfg.hostAlias}"}
+
+    printf '\ncontainer-builder verification succeeded\n'
+  '';
+
   runtimeScript = pkgs.writeShellScript "container-builder-runtime" ''
     set -euo pipefail
 
@@ -239,8 +264,10 @@ let
       Port ${toString cfg.port}
       User ${cfg.sshUser}
       IdentityFile ${sshKeyPath}
+      BatchMode yes
       StrictHostKeyChecking no
       UserKnownHostsFile /dev/null
+      LogLevel ERROR
   '';
 
   sshWrapperScript = pkgs.writeShellScript "container-builder-ssh-wrapper" ''
@@ -470,6 +497,7 @@ in
       ${pkgs.coreutils}/bin/install -m 0755 ${proxyScript} ${escapeShellArg "${workDir}/proxy.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${startScript} ${escapeShellArg "${workDir}/start-container.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${stopScript} ${escapeShellArg "${workDir}/stop-container.sh"}
+      ${pkgs.coreutils}/bin/install -m 0755 ${verifyScript} ${escapeShellArg "${workDir}/verify-builder.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${sshWrapperScript} ${escapeShellArg "${workDir}/ssh-wrapper.sh"}
       ${pkgs.coreutils}/bin/install -m 0644 ${userSshConfig} ${escapeShellArg "${workDir}/ssh_config"}
       ${pkgs.coreutils}/bin/install -m 0644 ${rootSshConfig} ${escapeShellArg "${workDir}/ssh_config_root"}
@@ -479,6 +507,7 @@ in
         ${escapeShellArg "${workDir}/proxy.sh"} \
         ${escapeShellArg "${workDir}/start-container.sh"} \
         ${escapeShellArg "${workDir}/stop-container.sh"} \
+        ${escapeShellArg "${workDir}/verify-builder.sh"} \
         ${escapeShellArg "${workDir}/ssh-wrapper.sh"} \
         ${escapeShellArg "${workDir}/ssh_config"} \
         ${escapeShellArg "${workDir}/ssh_config_root"}

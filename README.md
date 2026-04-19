@@ -14,6 +14,7 @@ Current design highlights:
 - manages a durable state directory under `~/.local/state/container-builder`
 - installs launch agents for the container runtime and the SSH bridge
 - configures container DNS explicitly for cache resolution
+- waits for a real SSH handshake before considering the builder ready
 - currently uses a `socat` bridge into `container exec`
 
 ## Module
@@ -87,9 +88,16 @@ services.container-builder = {
 Suggested validation after activation:
 
 ```bash
-ssh container-builder 'getent hosts cache.nixos.org'
-ssh container-builder 'nix store ping --store https://cache.nixos.org'
+~/.local/state/container-builder/verify-builder.sh
 ```
+
+The generated helper checks:
+
+- `container system status`
+- SSH connectivity to `container-builder`
+- DNS lookup for `cache.nixos.org` inside the builder
+- Nix cache reachability inside the builder
+- `ssh-ng://container-builder` reachability from the host daemon side
 
 See `apple-container_spec.md` and `docs/poc/README.md` for the detailed design
 notes and migration history.
