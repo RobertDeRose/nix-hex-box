@@ -51,6 +51,9 @@ let
     trusted-users = root builder
     experimental-features = nix-command flakes
     build-users-group =
+    substituters = https://cache.nixos.org/
+    trusted-substituters = https://cache.nixos.org/
+    trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
     EOF
 
     mkdir -p /home/builder/.ssh
@@ -159,6 +162,26 @@ let
       -m ${escapeShellArg cfg.memory}
       -v ${escapeShellArg "${workDir}:/config"}
     )
+
+    ${optionalString (cfg.dns.servers != [ ]) ''
+      ${concatMapStringsSep "\n" (server: "args+=( --dns ${escapeShellArg server} )") cfg.dns.servers}
+    ''}
+
+    ${optionalString (cfg.dns.search != [ ]) ''
+      ${concatMapStringsSep "\n" (domain: "args+=( --dns-search ${escapeShellArg domain} )") cfg.dns.search}
+    ''}
+
+    ${optionalString (cfg.dns.options != [ ]) ''
+      ${concatMapStringsSep "\n" (option: "args+=( --dns-option ${escapeShellArg option} )") cfg.dns.options}
+    ''}
+
+    ${optionalString (cfg.dns.domain != null) ''
+      args+=( --dns-domain ${escapeShellArg cfg.dns.domain} )
+    ''}
+
+    ${optionalString cfg.dns.disable ''
+      args+=( --no-dns )
+    ''}
 
     ${optionalString (!cfg.bridge.enable) ''
       args+=( -p ${escapeShellArg "${cfg.listenAddress}:${toString cfg.port}:${toString cfg.containerPort}"} )
@@ -317,6 +340,39 @@ in
       type = types.str;
       default = "1G";
       description = "Memory value passed to `container run -m`.";
+    };
+
+    dns.servers = mkOption {
+      type = types.listOf types.str;
+      default = [
+        "1.1.1.1"
+        "8.8.8.8"
+      ];
+      description = "DNS servers passed to `container run --dns` for the builder container.";
+    };
+
+    dns.search = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      description = "DNS search domains passed to `container run --dns-search`.";
+    };
+
+    dns.options = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      description = "Resolver options passed to `container run --dns-option`.";
+    };
+
+    dns.domain = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = "Default DNS domain passed to `container run --dns-domain`.";
+    };
+
+    dns.disable = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Disable container DNS configuration with `container run --no-dns`.";
     };
 
     systems = mkOption {

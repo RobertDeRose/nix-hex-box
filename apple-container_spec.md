@@ -52,9 +52,10 @@
 
 ### 6. Resolve DNS/substituter behavior inside the container
 
-- Determine whether the container can be configured with working DNS consistently.
-- If yes, enable substitutes in-container for speed.
-- If no, document that the builder will function but copy dependencies from the host.
+- The module now passes explicit DNS settings via `container run --dns` and related flags.
+- The builder init script now configures `https://cache.nixos.org/` as a substituter.
+- Remaining work is runtime verification that Apple `container` honors the DNS settings reliably.
+- If DNS still fails at runtime, document the fallback behavior and investigate alternative network settings.
 
 ### 7. Decide what "done" means for the module
 

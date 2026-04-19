@@ -37,7 +37,7 @@ nix-daemon (root)
 ## Remaining PoC Questions
 
 - Can direct port publishing replace the `socat` bridge?
-- Can DNS/substituters work reliably inside the container?
+- Do explicit `--dns` flags resolve cache access reliably in the builder container?
 - Can the builder support on-demand lifecycle cleanly?
 
 See `../../apple-container_spec.md` for the current plan.
