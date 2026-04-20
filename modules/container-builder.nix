@@ -33,6 +33,7 @@ let
   });
   containerVersion = builtins.substring 0 12 (builtins.baseNameOf containerConfigSpec);
   effectiveContainerName = "${cfg.containerName}-${containerVersion}";
+  containerConfigStamp = "generation=${containerVersion}";
 
   workDir = cfg.workingDirectory;
   containerExecutable = "/usr/local/bin/container";
@@ -185,7 +186,15 @@ let
       esac
     done < <("$container_bin" list --all 2>/dev/null || true)
 
-    container_info="$($container_bin inspect "$container_name" --format json 2>/dev/null || true)"
+    container_info="$($container_bin inspect "$container_name" 2>/dev/null || true)"
+
+    if [ -n "$container_info" ]; then
+      if ! printf '%s' "$container_info" | ${pkgs.gnugrep}/bin/grep -q ${escapeShellArg containerConfigStamp}; then
+        echo "existing container-builder container does not match current config generation; recreating"
+        "$container_bin" rm -f "$container_name" >/dev/null 2>&1 || true
+        container_info=""
+      fi
+    fi
 
     if [ -n "$container_info" ]; then
       if printf '%s' "$container_info" | ${pkgs.gnugrep}/bin/grep -q '"state"[[:space:]]*:[[:space:]]*"running"'; then
@@ -207,6 +216,7 @@ let
       -d
       --rm
       --name "$container_name"
+      --label ${escapeShellArg "org.nixos.container-builder.${containerConfigStamp}"}
       --cpus ${escapeShellArg (toString cfg.cpus)}
       -m ${escapeShellArg cfg.memory}
       -v ${escapeShellArg "${workDir}:/config"}
