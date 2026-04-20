@@ -264,34 +264,27 @@ let
   statusScript = pkgs.writeShellScript "container-builder-status" ''
     set -euo pipefail
 
+    mode="status"
+    if [ "''${1:-}" = "--verify" ]; then
+      mode="verify"
+      shift
+    elif [ "''${1:-}" = "--help" ] || [ "''${1:-}" = "-h" ]; then
+      cat <<'EOF'
+Usage: container-builder-status [--verify]
+
+  No flag    Show non-destructive builder status.
+  --verify   Perform full verification and attempt runtime recovery if needed.
+EOF
+      exit 0
+    elif [ "$#" -gt 0 ]; then
+      echo "unknown argument: $1" >&2
+      exit 2
+    fi
+
     host_alias=${escapeShellArg cfg.hostAlias}
     ssh_config=${escapeShellArg "${workDir}/ssh_config_root"}
     container_bin=${escapeShellArg cfg.containerBinary}
     container_name=${escapeShellArg effectiveContainerName}
-
-    printf '==> Apple container system\n'
-    "$container_bin" system status || true
-
-    printf '\n==> Builder container\n'
-    "$container_bin" inspect "$container_name" 2>/dev/null || printf 'container %s not found\n' "$container_name"
-
-    printf '\n==> SSH handshake\n'
-    if /usr/bin/ssh -F "$ssh_config" -o BatchMode=yes -o ConnectTimeout=2 "$host_alias" true >/dev/null 2>&1; then
-      printf 'ok\n'
-    else
-      printf 'failed\n'
-    fi
-
-    printf '\n==> Remote store ping\n'
-    nix store ping --store ${escapeShellArg "${cfg.protocol}://${cfg.hostAlias}"} || true
-  '';
-
-  verifyScript = pkgs.writeShellScript "container-builder-verify" ''
-    set -euo pipefail
-
-    host_alias=${escapeShellArg cfg.hostAlias}
-    ssh_config=${escapeShellArg "${workDir}/ssh_config_root"}
-    container_bin=${escapeShellArg cfg.containerBinary}
     runtime_plist="$HOME/Library/LaunchAgents/org.nixos.container-builder-runtime.plist"
 
     recover_container_system() {
@@ -308,23 +301,38 @@ let
       fi
     }
 
-    printf '==> container system status\n'
+    printf '==> Apple container system\n'
     if ! "$container_bin" system status; then
-      recover_container_system
-      printf '\n==> container system status (after recovery)\n'
-      "$container_bin" system status
+      if [ "$mode" = "verify" ]; then
+        recover_container_system
+        printf '\n==> Apple container system (after recovery)\n'
+        "$container_bin" system status
+      else
+        exit 1
+      fi
     fi
 
+    printf '\n==> Builder container\n'
+    "$container_bin" inspect "$container_name" 2>/dev/null || printf 'container %s not found\n' "$container_name"
+
     printf '\n==> SSH handshake\n'
-    /usr/bin/ssh -F "$ssh_config" -o BatchMode=yes "$host_alias" true
+    if /usr/bin/ssh -F "$ssh_config" -o BatchMode=yes -o ConnectTimeout=2 "$host_alias" true >/dev/null 2>&1; then
+      printf 'ok\n'
+    else
+      printf 'failed\n'
+      if [ "$mode" = "status" ]; then
+        exit 1
+      fi
+    fi
 
-    printf '\n==> Nix cache reachability inside builder\n'
-    /usr/bin/ssh -F "$ssh_config" -o BatchMode=yes "$host_alias" 'nix store ping --store https://cache.nixos.org'
-
-    printf '\n==> Remote store ping via ssh-ng\n'
-    nix store ping --store ${escapeShellArg "${cfg.protocol}://${cfg.hostAlias}"}
-
-    printf '\ncontainer-builder verification succeeded\n'
+    printf '\n==> Remote store ping\n'
+    if [ "$mode" = "verify" ]; then
+      /usr/bin/ssh -F "$ssh_config" -o BatchMode=yes "$host_alias" 'nix store ping --store https://cache.nixos.org'
+      nix store ping --store ${escapeShellArg "${cfg.protocol}://${cfg.hostAlias}"}
+      printf '\ncontainer-builder verification succeeded\n'
+    else
+      nix store ping --store ${escapeShellArg "${cfg.protocol}://${cfg.hostAlias}"} || true
+    fi
   '';
 
   runtimeScript = pkgs.writeShellScript "container-builder-runtime" ''
@@ -611,8 +619,6 @@ in
       ${pkgs.coreutils}/bin/install -m 0755 ${proxyScript} ${escapeShellArg "${workDir}/proxy.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${startScript} ${escapeShellArg "${workDir}/start-container.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${stopScript} ${escapeShellArg "${workDir}/stop-container.sh"}
-      ${pkgs.coreutils}/bin/install -m 0755 ${statusScript} ${escapeShellArg "${workDir}/status-builder.sh"}
-      ${pkgs.coreutils}/bin/install -m 0755 ${verifyScript} ${escapeShellArg "${workDir}/verify-builder.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${sshWrapperScript} ${escapeShellArg "${workDir}/ssh-wrapper.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${statusScript} /usr/local/bin/container-builder-status
       ${pkgs.coreutils}/bin/install -m 0644 ${userSshConfig} ${escapeShellArg "${workDir}/ssh_config"}
@@ -623,8 +629,6 @@ in
         ${escapeShellArg "${workDir}/proxy.sh"} \
         ${escapeShellArg "${workDir}/start-container.sh"} \
         ${escapeShellArg "${workDir}/stop-container.sh"} \
-        ${escapeShellArg "${workDir}/status-builder.sh"} \
-        ${escapeShellArg "${workDir}/verify-builder.sh"} \
         ${escapeShellArg "${workDir}/ssh-wrapper.sh"} \
         ${escapeShellArg "${workDir}/ssh_config"} \
         ${escapeShellArg "${workDir}/ssh_config_root"}

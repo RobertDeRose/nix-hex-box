@@ -110,23 +110,25 @@ In practice, this means the module is close to idempotent for the configuration 
 
 ## Verification And Recovery
 
-After activation, the main verification entrypoint is:
+After activation, the main status and verification entrypoint is:
 
 ```bash
-~/.local/state/container-builder/verify-builder.sh
+container-builder-status
 ```
 
-For a quick non-destructive status check, the module also installs:
+For full verification and recovery-aware checks, use:
 
 ```bash
-/usr/local/bin/container-builder-status
+container-builder-status --verify
 ```
 
-Suggested validation after activation:
+With no arguments, `container-builder-status` performs a non-destructive status check.
+With `--verify`, it performs full verification and may attempt Apple container runtime recovery.
 
-The generated helper checks:
+The helper checks:
 
 - `container system status`
+- current builder container inspect output
 - SSH connectivity to `container-builder`
 - Nix cache reachability inside the builder
 - `ssh-ng://container-builder` reachability from the host daemon side
