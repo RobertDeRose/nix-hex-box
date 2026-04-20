@@ -145,5 +145,4 @@ What it cannot do:
 - fix every possible launchd/XPC/vmnet failure without user involvement
 - replace upstream runtime debugging when Apple `container` itself is broken
 
-See `apple-container_spec.md` and `docs/poc/README.md` for the detailed design
-notes and migration history.
+See `docs/spec.md` for the detailed design notes.
