@@ -135,6 +135,7 @@ let
     cat > /etc/ssh/sshd_config << 'EOF'
     ListenAddress 0.0.0.0:${toString cfg.containerPort}
     HostKey /etc/ssh/ssh_host_ed25519_key
+    PidFile /run/sshd/sshd.pid
     PermitRootLogin no
     PubkeyAuthentication yes
     PasswordAuthentication no
@@ -153,8 +154,30 @@ let
   '';
 
   proxyScript = pkgs.writeShellScript "container-builder-proxy" ''
-    exec ${escapeShellArg cfg.containerBinary} exec -i ${escapeShellArg effectiveContainerName} \
-      bash -c ${escapeShellArg "exec 3<>/dev/tcp/127.0.0.1/${toString cfg.containerPort}; cat <&3 & cat >&3; kill %1 2>/dev/null"}
+    set -euo pipefail
+
+    container_bin=${escapeShellArg cfg.containerBinary}
+    container_name=${escapeShellArg effectiveContainerName}
+    timeout_seconds=${escapeShellArg (toString cfg.readiness.timeoutSeconds)}
+    interval_seconds=${escapeShellArg (toString cfg.readiness.intervalSeconds)}
+    deadline=$(( $(/bin/date +%s) + timeout_seconds ))
+
+    "$container_bin" system start >/dev/null 2>&1 || true
+    ${startScript} >/dev/null 2>&1 || true
+
+    while [ "$(( $(/bin/date +%s) ))" -lt "$deadline" ]; do
+      if "$container_bin" exec "$container_name" sh -c ${escapeShellArg ''pid=$(cat /run/sshd/sshd.pid 2>/dev/null || true); [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null''} </dev/null >/dev/null 2>&1; then
+        container_ip=$("$container_bin" inspect "$container_name" 2>/dev/null | /usr/bin/grep -Eo '"ipv4Address":"[0-9.]+' | /usr/bin/sed -n '1s/.*:"//p')
+        if [ -n "$container_ip" ]; then
+          exec /usr/bin/nc "$container_ip" ${toString cfg.containerPort}
+        fi
+      fi
+
+      /bin/sleep "$interval_seconds"
+    done
+
+    echo "timed out waiting for in-container SSH readiness" >&2
+    exit 1
   '';
 
   readinessScript = pkgs.writeShellScript "container-builder-readiness" ''
@@ -230,11 +253,17 @@ let
     if [ -n "$container_info" ]; then
       if printf '%s' "$container_info" | ${pkgs.gnugrep}/bin/grep -q '"status"[[:space:]]*:[[:space:]]*"running"'; then
         echo "container-builder container already running"
+        ${optionalString cfg.idleShutdown.enable ''
+          ${pkgs.coreutils}/bin/nohup ${idleShutdownScript} >/dev/null 2>&1 &
+        ''}
         exit 0
       fi
 
       echo "attempting to start existing container-builder container"
       if "$container_bin" start "$container_name"; then
+        ${optionalString cfg.idleShutdown.enable ''
+          ${pkgs.coreutils}/bin/nohup ${idleShutdownScript} >/dev/null 2>&1 &
+        ''}
         exit 0
       fi
 
@@ -294,7 +323,11 @@ let
       ${escapeShellArg "sh /config/init.sh"}
     )
 
-    exec "$container_bin" "''${args[@]}"
+    "$container_bin" "''${args[@]}"
+
+    ${optionalString cfg.idleShutdown.enable ''
+      ${pkgs.coreutils}/bin/nohup ${idleShutdownScript} >/dev/null 2>&1 &
+    ''}
   '';
 
   stopScript = pkgs.writeShellScript "container-builder-stop" ''
@@ -361,7 +394,7 @@ let
       idle_for=$(( now - last_active ))
 
       if [ "$idle_for" -lt "$timeout_seconds" ]; then
-        echo "[$(/bin/date)] builder idle for ${idle_for}s; waiting until ${timeout_seconds}s"
+        echo "[$(/bin/date)] builder idle for $idle_for s; waiting until $timeout_seconds s"
         continue
       fi
 
@@ -489,6 +522,8 @@ let
 
     do_repair() {
       local recovered=no
+      local readiness_attempt=1
+      local readiness_ok=0
 
       if status_system >/dev/null; then
         print_mark ok 'Apple container system running'
@@ -524,7 +559,20 @@ let
         exit 1
       fi
 
-      if ${readinessScript} >/dev/null 2>&1; then
+      while [ "$readiness_attempt" -le 3 ]; do
+        if ${readinessScript} >/dev/null 2>&1; then
+          readiness_ok=1
+          break
+        fi
+
+        readiness_attempt=$((readiness_attempt + 1))
+        if [ "$readiness_attempt" -le 3 ]; then
+          ${startScript} >/dev/null 2>&1 || true
+          /bin/sleep 2
+        fi
+      done
+
+      if [ "$readiness_ok" -eq 1 ]; then
         print_mark ok 'SSH handshake succeeded'
       else
         print_mark fail 'SSH handshake failed'
@@ -698,10 +746,6 @@ EOF
       echo "[$(/bin/date)] builder start script failed" >&2
       exit 1
     fi
-
-    ${optionalString cfg.idleShutdown.enable ''
-      ${pkgs.coreutils}/bin/nohup ${idleShutdownScript} >/dev/null 2>&1 &
-    ''}
 
     ${escapeShellArg cfg.containerBinary} inspect ${escapeShellArg effectiveContainerName} >> "$log_file" 2>&1 || true
     ${escapeShellArg cfg.containerBinary} logs --boot ${escapeShellArg effectiveContainerName} >> "$log_file" 2>&1 || true
@@ -959,10 +1003,7 @@ in
       }
     ];
 
-    environment.systemPackages = [
-      pkgs.netcat
-      pkgs.socat
-    ];
+    environment.systemPackages = [ pkgs.netcat ] ++ optional cfg.bridge.enable pkgs.socat;
 
     environment.etc."ssh/ssh_config.d/201-container-builder.conf".source = rootSshConfig;
 
@@ -1023,7 +1064,7 @@ in
     launchd.user.agents.container-builder-runtime = mkIf cfg.autoStart {
       serviceConfig = {
         ProgramArguments = [ runtimeLaunchPath ];
-        KeepAlive = true;
+        KeepAlive = false;
         RunAtLoad = true;
         ProcessType = "Background";
         StandardErrorPath = "${workDir}/container-runtime.err.log";

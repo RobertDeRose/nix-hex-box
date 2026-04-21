@@ -13,10 +13,11 @@ Current design highlights:
 - configures `nix.buildMachines` for `ssh-ng://container-builder`
 - uses a published GHCR builder image with overlay mount tooling preinstalled
 - manages a durable state directory under `~/.local/state/nac`
-- installs launch agents for the container runtime and the SSH bridge
+- installs launch agents for the container runtime and the optional host-side SSH bridge
+- uses direct `ProxyCommand` via `~/.local/state/nac/proxy.sh` for user-side helper access, while the localhost bridge remains the compatible path for the root `nix-daemon`
 - configures container DNS explicitly for cache resolution
 - waits for a real SSH handshake before considering the builder ready
-- currently uses a `socat` bridge into `container exec`
+- wakes the builder on demand and relays SSH directly to the current container IP
 
 ## Module
 
@@ -63,6 +64,7 @@ Known open areas:
 - live runtime verification on a real machine
 - possible direct port publishing instead of `socat`
 - on-demand lifecycle
+- broader validation of when bridge-free operation is safe for daemon-driven builds
 
 ## DNS
 
@@ -165,6 +167,11 @@ The helper supports:
 - `nac restart`
 - `nac ssh`
 - `nac inspect`
+
+The helper's user-side SSH path uses `ProxyCommand ${HOME}/.local/state/nac/proxy.sh`
+to wake the builder and relay directly to the current container IP. The root
+daemon path can still use the localhost bridge, which remains the supported path
+for remote builds on the current host setup.
 
 The helper checks:
 
