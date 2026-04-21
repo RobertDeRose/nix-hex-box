@@ -1072,8 +1072,11 @@ in
     launchd.user.agents."${runtimeAgentName}" = mkIf cfg.autoStart {
       serviceConfig = {
         ProgramArguments = [ runtimeLaunchPath ];
-        KeepAlive = false;
+        KeepAlive = {
+          SuccessfulExit = false;
+        };
         RunAtLoad = true;
+        ThrottleInterval = 30;
         ProcessType = "Background";
         StandardErrorPath = "${workDir}/container-runtime.err.log";
         StandardOutPath = "${workDir}/container-runtime.out.log";
