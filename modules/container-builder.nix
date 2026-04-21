@@ -122,8 +122,8 @@ let
     if ! id sshd > /dev/null 2>&1; then
       echo "sshd:x:74:74:sshd privsep:/var/empty:/bin/false" >> /etc/passwd
       echo "sshd:x:74:" >> /etc/group
-      mkdir -p /var/empty
     fi
+    mkdir -p /var/empty
 
     mkdir -p /run/sshd
     cat > /etc/ssh/sshd_config << 'EOF'
