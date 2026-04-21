@@ -38,7 +38,7 @@ let
   containerVersion = builtins.substring 0 12 (builtins.baseNameOf containerConfigSpec);
   effectiveContainerName = "${cfg.containerName}-${containerVersion}";
   overlayVolumeName = "${cfg.containerName}-store";
-  containerConfigStamp = "generation=${containerVersion}";
+  containerGenerationLabel = "org.nixos.container-builder.generation";
 
   workDir = cfg.workingDirectory;
   cacheDir = "${workDir}/cache";
@@ -218,7 +218,7 @@ let
     container_info="$($container_bin inspect "$container_name" 2>/dev/null || true)"
 
     if [ -n "$container_info" ]; then
-      if ! printf '%s' "$container_info" | ${pkgs.gnugrep}/bin/grep -q ${escapeShellArg containerConfigStamp}; then
+      if ! printf '%s' "$container_info" | ${pkgs.gnugrep}/bin/grep -Eq ${escapeShellArg ''"${containerGenerationLabel}"[[:space:]]*:[[:space:]]*"${containerVersion}"''}; then
         echo "existing container-builder container does not match current config generation; recreating"
         "$container_bin" rm -f "$container_name" >/dev/null 2>&1 || true
         container_info=""
@@ -253,7 +253,7 @@ let
       --rm
       --init
       --name "$container_name"
-      --label ${escapeShellArg "org.nixos.container-builder.${containerConfigStamp}"}
+      --label ${escapeShellArg "${containerGenerationLabel}=${containerVersion}"}
       --cpus ${escapeShellArg (toString cfg.cpus)}
       -m ${escapeShellArg cfg.memory}
       -v ${escapeShellArg "${workDir}:/config"}
@@ -350,6 +350,24 @@ let
       nix store ping --store ${escapeShellArg "${cfg.protocol}://${cfg.hostAlias}"} >/dev/null 2>&1
     }
 
+    status_with_retries() {
+      local attempts="$1"
+      shift
+      local remaining="$attempts"
+
+      while [ "$remaining" -gt 0 ]; do
+        if "$@"; then
+          return 0
+        fi
+        remaining=$((remaining - 1))
+        if [ "$remaining" -gt 0 ]; then
+          /bin/sleep 1
+        fi
+      done
+
+      return 1
+    }
+
     render_status() {
       local system_state=down
       local container_state=missing
@@ -368,12 +386,16 @@ let
         container_state=stopped
       fi
 
-      if status_ssh; then
+      if status_with_retries 3 status_ssh; then
         ssh_state=ok
+      elif [ "$container_state" = running ]; then
+        ssh_state=starting
       fi
 
-      if status_remote_store; then
+      if status_with_retries 3 status_remote_store; then
         remote_state=ok
+      elif [ "$container_state" = running ]; then
+        remote_state=starting
       fi
 
       if launchctl print gui/$(id -u)/org.nixos.container-builder-runtime >/dev/null 2>&1; then
