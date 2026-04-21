@@ -9,8 +9,8 @@ let
   cfg = config.services.container-builder;
   owner = cfg.user;
   overlayMountDir = "/nix-overlay";
-  overlayUpperDir = "${overlayMountDir}/upper-${containerVersion}";
-  overlayWorkDir = "${overlayMountDir}/work-${containerVersion}";
+  overlayUpperDir = "${overlayMountDir}/upper";
+  overlayWorkDir = "${overlayMountDir}/work";
   containerConfigSpec = pkgs.writeText "container-builder-config.json" (builtins.toJSON {
     inherit owner;
     containerName = cfg.containerName;
