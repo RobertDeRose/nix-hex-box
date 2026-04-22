@@ -328,11 +328,15 @@ let
     ''}
 
     ${optionalString (cfg.dns.search != [ ]) ''
-      ${concatMapStringsSep "\n" (domain: "args+=( --dns-search ${escapeShellArg domain} )") cfg.dns.search}
+      ${concatMapStringsSep "\n" (
+        domain: "args+=( --dns-search ${escapeShellArg domain} )"
+      ) cfg.dns.search}
     ''}
 
     ${optionalString (cfg.dns.options != [ ]) ''
-      ${concatMapStringsSep "\n" (option: "args+=( --dns-option ${escapeShellArg option} )") cfg.dns.options}
+      ${concatMapStringsSep "\n" (
+        option: "args+=( --dns-option ${escapeShellArg option} )"
+      ) cfg.dns.options}
     ''}
 
     ${optionalString (cfg.dns.domain != null) ''
@@ -363,314 +367,314 @@ let
   '';
 
   helperScript = pkgs.writeShellScript "hb" ''
-    set -euo pipefail
+        set -euo pipefail
 
-    host_alias=${escapeShellArg cfg.hostAlias}
-    ssh_config=${escapeShellArg "${workDir}/ssh_config_root"}
-    container_bin=${escapeShellArg cfg.containerBinary}
-    container_name=${escapeShellArg effectiveContainerName}
-    overlay_volume=${escapeShellArg overlayVolumeName}
-    runtime_plist="$HOME/Library/LaunchAgents/${runtimeAgentLabel}.plist"
-    runtime_log=${escapeShellArg runtimeLogPath}
-    readiness_log=${escapeShellArg readinessLogPath}
-    bridge_out_log=${escapeShellArg "${workDir}/hexbox-bridge.out.log"}
-    bridge_err_log=${escapeShellArg "${workDir}/hexbox-bridge.err.log"}
+        host_alias=${escapeShellArg cfg.hostAlias}
+        ssh_config=${escapeShellArg "${workDir}/ssh_config_root"}
+        container_bin=${escapeShellArg cfg.containerBinary}
+        container_name=${escapeShellArg effectiveContainerName}
+        overlay_volume=${escapeShellArg overlayVolumeName}
+        runtime_plist="$HOME/Library/LaunchAgents/${runtimeAgentLabel}.plist"
+        runtime_log=${escapeShellArg runtimeLogPath}
+        readiness_log=${escapeShellArg readinessLogPath}
+        bridge_out_log=${escapeShellArg "${workDir}/hexbox-bridge.out.log"}
+        bridge_err_log=${escapeShellArg "${workDir}/hexbox-bridge.err.log"}
 
-    print_mark() {
-      case "$1" in
-        ok) printf '[x] %s\n' "$2" ;;
-        fail) printf '[ ] %s\n' "$2" ;;
-        skip) printf '[-] %s\n' "$2" ;;
-      esac
-    }
+        print_mark() {
+          case "$1" in
+            ok) printf '[x] %s\n' "$2" ;;
+            fail) printf '[ ] %s\n' "$2" ;;
+            skip) printf '[-] %s\n' "$2" ;;
+          esac
+        }
 
-    recover_container_system() {
-      if [ -f "$runtime_plist" ]; then
-        launchctl unload "$runtime_plist" || true
-      fi
-
-      "$container_bin" system start --enable-kernel-install
-
-      if [ -f "$runtime_plist" ]; then
-        launchctl load "$runtime_plist" || true
-      fi
-    }
-
-    status_system() {
-      "$container_bin" system status --format json 2>/dev/null || return 1
-    }
-
-    status_container() {
-      "$container_bin" inspect "$container_name" 2>/dev/null || return 1
-    }
-
-    status_ssh() {
-      /usr/bin/ssh -F "$ssh_config" -o BatchMode=yes -o ConnectTimeout=2 "$host_alias" true >/dev/null 2>&1
-    }
-
-    status_remote_store() {
-      nix store ping --store ${escapeShellArg "${cfg.protocol}://${cfg.hostAlias}"} >/dev/null 2>&1
-    }
-
-    status_with_retries() {
-      local attempts="$1"
-      shift
-      local remaining="$attempts"
-
-      while [ "$remaining" -gt 0 ]; do
-        if "$@"; then
-          return 0
-        fi
-        remaining=$((remaining - 1))
-        if [ "$remaining" -gt 0 ]; then
-          /bin/sleep 1
-        fi
-      done
-
-      return 1
-    }
-
-    render_status() {
-      local system_state=down
-      local container_state=missing
-      local ssh_state=failed
-      local remote_state=failed
-      local runtime_state=unknown
-      local bridge_state=disabled
-
-      if status_system >/dev/null; then
-        system_state=running
-      fi
-
-      if status_container | ${pkgs.gnugrep}/bin/grep -q '"status"[[:space:]]*:[[:space:]]*"running"'; then
-        container_state=running
-      elif status_container >/dev/null 2>&1; then
-        container_state=stopped
-      fi
-
-      if [ "$container_state" = running ]; then
-        if status_with_retries 3 status_ssh; then
-          ssh_state=ok
-        else
-          ssh_state=starting
-        fi
-      fi
-
-      if [ "$container_state" = running ]; then
-        if status_with_retries 3 status_remote_store; then
-          remote_state=ok
-        else
-          remote_state=starting
-        fi
-      fi
-
-      if launchctl print gui/$(id -u)/${runtimeAgentLabel} >/dev/null 2>&1; then
-        runtime_state=loaded
-      fi
-
-      if launchctl print gui/$(id -u)/${bridgeAgentLabel} >/dev/null 2>&1; then
-        bridge_state=loaded
-      fi
-
-      printf '%-18s %s\n' COMPONENT STATE
-      printf '%-18s %s\n' --------- -----
-      printf '%-18s %s\n' 'container system' "$system_state"
-      printf '%-18s %s\n' 'runtime agent' "$runtime_state"
-      printf '%-18s %s\n' 'bridge agent' "$bridge_state"
-      printf '%-18s %s\n' 'builder container' "$container_state"
-      printf '%-18s %s\n' 'ssh handshake' "$ssh_state"
-      printf '%-18s %s\n' 'remote store' "$remote_state"
-      printf '%-18s %s\n' 'overlay volume' "$overlay_volume"
-    }
-
-    do_repair() {
-      local recovered=no
-      local readiness_attempt=1
-      local readiness_ok=0
-
-      if status_system >/dev/null; then
-        print_mark ok 'Apple container system running'
-      else
-        print_mark fail 'Apple container system unhealthy; attempting recovery'
-        if recover_container_system; then
-          recovered=yes
-          print_mark ok 'Apple container recovery succeeded'
-        else
-          print_mark fail 'Apple container recovery failed'
-          exit 1
-        fi
-      fi
-
-      if launchctl print gui/$(id -u)/${runtimeAgentLabel} >/dev/null 2>&1; then
-        print_mark ok 'Runtime agent loaded'
-      else
-        print_mark fail 'Runtime agent not loaded'
-      fi
-
-      if launchctl print gui/$(id -u)/${bridgeAgentLabel} >/dev/null 2>&1; then
-        print_mark ok 'Bridge agent loaded'
-      else
-        print_mark fail 'Bridge agent not loaded'
-      fi
-
-      ${startScript} >/dev/null 2>&1 || true
-
-      if status_container | ${pkgs.gnugrep}/bin/grep -q '"status"[[:space:]]*:[[:space:]]*"running"'; then
-        print_mark ok 'Builder container running'
-      else
-        print_mark fail 'Builder container not running'
-        exit 1
-      fi
-
-      while [ "$readiness_attempt" -le 3 ]; do
-        if ${readinessScript} >/dev/null 2>&1; then
-          readiness_ok=1
-          break
-        fi
-
-        readiness_attempt=$((readiness_attempt + 1))
-        if [ "$readiness_attempt" -le 3 ]; then
-          ${startScript} >/dev/null 2>&1 || true
-          /bin/sleep 2
-        fi
-      done
-
-      if [ "$readiness_ok" -eq 1 ]; then
-        print_mark ok 'SSH handshake succeeded'
-      else
-        print_mark fail 'SSH handshake failed'
-        exit 1
-      fi
-
-      if /usr/bin/ssh -F "$ssh_config" -o BatchMode=yes "$host_alias" 'nix store ping --store https://cache.nixos.org' >/dev/null 2>&1; then
-        print_mark ok 'Builder can reach cache.nixos.org'
-      else
-        print_mark fail 'Builder cannot reach cache.nixos.org'
-        exit 1
-      fi
-
-      if nix store ping --store ${escapeShellArg "${cfg.protocol}://${cfg.hostAlias}"} >/dev/null 2>&1; then
-        print_mark ok 'Host can reach remote store'
-      else
-        print_mark fail 'Host cannot reach remote store'
-        exit 1
-      fi
-
-      if [ "$recovered" = yes ]; then
-        print_mark ok 'Recovery was required'
-      else
-        print_mark skip 'Recovery not required'
-      fi
-    }
-
-    do_logs() {
-      local target="''${1:-runtime}"
-      shift || true
-      local follow=0
-      local lines=100
-
-      while [ "$#" -gt 0 ]; do
-        case "$1" in
-          -f|--follow) follow=1 ;;
-          -n) shift; lines="$1" ;;
-          *) echo "unknown logs argument: $1" >&2; exit 2 ;;
-        esac
-        shift || true
-      done
-
-      case "$target" in
-        runtime) logfile="$runtime_log" ;;
-        idle) logfile=${escapeShellArg idleLogPath} ;;
-        readiness) logfile="$readiness_log" ;;
-        bridge) logfile="$bridge_err_log" ;;
-        bridge-out) logfile="$bridge_out_log" ;;
-        boot)
-          if [ "$follow" -eq 1 ]; then
-            exec "$container_bin" logs --boot --follow "$container_name"
-          else
-            exec "$container_bin" logs --boot -n "$lines" "$container_name"
+        recover_container_system() {
+          if [ -f "$runtime_plist" ]; then
+            launchctl unload "$runtime_plist" || true
           fi
-          ;;
-        *) echo "unknown log target: $target" >&2; exit 2 ;;
-      esac
 
-      if [ ! -f "$logfile" ]; then
-        echo "log file not found: $logfile" >&2
-        exit 1
-      fi
+          "$container_bin" system start --enable-kernel-install
 
-      if [ "$follow" -eq 1 ]; then
-        exec ${pkgs.coreutils}/bin/tail -n "$lines" -f "$logfile"
-      else
-        exec ${pkgs.coreutils}/bin/tail -n "$lines" "$logfile"
-      fi
-    }
+          if [ -f "$runtime_plist" ]; then
+            launchctl load "$runtime_plist" || true
+          fi
+        }
 
-    do_gc() {
-      exec /usr/bin/ssh -F "$ssh_config" "$host_alias" 'nix-collect-garbage -d'
-    }
+        status_system() {
+          "$container_bin" system status --format json 2>/dev/null || return 1
+        }
 
-    do_reset() {
-      ${stopScript} >/dev/null 2>&1 || true
-      "$container_bin" volume delete "$overlay_volume" >/dev/null 2>&1 || true
-      "$container_bin" volume create \
-        --label ${escapeShellArg "org.nixos.container-builder.store=true"} \
-        "$overlay_volume" >/dev/null
-      ${startScript}
-      ${readinessScript}
-      render_status
-    }
+        status_container() {
+          "$container_bin" inspect "$container_name" 2>/dev/null || return 1
+        }
 
-    do_restart() {
-      ${stopScript} >/dev/null 2>&1 || true
-      ${startScript}
-      ${readinessScript}
-      render_status
-    }
+        status_ssh() {
+          /usr/bin/ssh -F "$ssh_config" -o BatchMode=yes -o ConnectTimeout=2 "$host_alias" true >/dev/null 2>&1
+        }
 
-    do_ssh() {
-      exec /usr/bin/ssh -F "$ssh_config" "$host_alias" "$@"
-    }
+        status_remote_store() {
+          nix store ping --store ${escapeShellArg "${cfg.protocol}://${cfg.hostAlias}"} >/dev/null 2>&1
+        }
 
-    do_inspect() {
-      printf '==> launchd runtime\n'
-      launchctl print gui/$(id -u)/${runtimeAgentLabel} || true
-      printf '\n==> launchd bridge\n'
-      launchctl print gui/$(id -u)/${bridgeAgentLabel} || true
-      printf '\n==> container inspect\n'
-      status_container || true
-    }
+        status_with_retries() {
+          local attempts="$1"
+          shift
+          local remaining="$attempts"
 
-    if [ "''${1:-}" = "--help" ] || [ "''${1:-}" = "-h" ] || [ "$#" -eq 0 ]; then
-      cat <<'EOF'
-Usage: hb <command>
+          while [ "$remaining" -gt 0 ]; do
+            if "$@"; then
+              return 0
+            fi
+            remaining=$((remaining - 1))
+            if [ "$remaining" -gt 0 ]; then
+              /bin/sleep 1
+            fi
+          done
 
-  status            Show builder status summary.
-  repair            Verify builder health and attempt runtime recovery.
-  logs [target]     Show logs. Targets: runtime, idle, readiness, bridge, bridge-out, boot.
-  gc                Run nix garbage collection inside the builder.
-  reset             Delete and recreate the overlay volume.
-  restart           Restart the builder container.
-  ssh               Open an SSH session to the builder.
-  inspect           Show raw launchd and container inspection data.
-EOF
-      exit 0
-    fi
+          return 1
+        }
 
-    command="$1"
-    shift
+        render_status() {
+          local system_state=down
+          local container_state=missing
+          local ssh_state=failed
+          local remote_state=failed
+          local runtime_state=unknown
+          local bridge_state=disabled
 
-    case "$command" in
-      status) render_status ;;
-      repair) do_repair ;;
-      logs) do_logs "$@" ;;
-      gc) do_gc ;;
-      reset) do_reset ;;
-      restart) do_restart ;;
-      ssh) do_ssh "$@" ;;
-      inspect) do_inspect ;;
-      *) echo "unknown command: $command" >&2; exit 2 ;;
-    esac
+          if status_system >/dev/null; then
+            system_state=running
+          fi
+
+          if status_container | ${pkgs.gnugrep}/bin/grep -q '"status"[[:space:]]*:[[:space:]]*"running"'; then
+            container_state=running
+          elif status_container >/dev/null 2>&1; then
+            container_state=stopped
+          fi
+
+          if [ "$container_state" = running ]; then
+            if status_with_retries 3 status_ssh; then
+              ssh_state=ok
+            else
+              ssh_state=starting
+            fi
+          fi
+
+          if [ "$container_state" = running ]; then
+            if status_with_retries 3 status_remote_store; then
+              remote_state=ok
+            else
+              remote_state=starting
+            fi
+          fi
+
+          if launchctl print gui/$(id -u)/${runtimeAgentLabel} >/dev/null 2>&1; then
+            runtime_state=loaded
+          fi
+
+          if launchctl print gui/$(id -u)/${bridgeAgentLabel} >/dev/null 2>&1; then
+            bridge_state=loaded
+          fi
+
+          printf '%-18s %s\n' COMPONENT STATE
+          printf '%-18s %s\n' --------- -----
+          printf '%-18s %s\n' 'container system' "$system_state"
+          printf '%-18s %s\n' 'runtime agent' "$runtime_state"
+          printf '%-18s %s\n' 'bridge agent' "$bridge_state"
+          printf '%-18s %s\n' 'builder container' "$container_state"
+          printf '%-18s %s\n' 'ssh handshake' "$ssh_state"
+          printf '%-18s %s\n' 'remote store' "$remote_state"
+          printf '%-18s %s\n' 'overlay volume' "$overlay_volume"
+        }
+
+        do_repair() {
+          local recovered=no
+          local readiness_attempt=1
+          local readiness_ok=0
+
+          if status_system >/dev/null; then
+            print_mark ok 'Apple container system running'
+          else
+            print_mark fail 'Apple container system unhealthy; attempting recovery'
+            if recover_container_system; then
+              recovered=yes
+              print_mark ok 'Apple container recovery succeeded'
+            else
+              print_mark fail 'Apple container recovery failed'
+              exit 1
+            fi
+          fi
+
+          if launchctl print gui/$(id -u)/${runtimeAgentLabel} >/dev/null 2>&1; then
+            print_mark ok 'Runtime agent loaded'
+          else
+            print_mark fail 'Runtime agent not loaded'
+          fi
+
+          if launchctl print gui/$(id -u)/${bridgeAgentLabel} >/dev/null 2>&1; then
+            print_mark ok 'Bridge agent loaded'
+          else
+            print_mark fail 'Bridge agent not loaded'
+          fi
+
+          ${startScript} >/dev/null 2>&1 || true
+
+          if status_container | ${pkgs.gnugrep}/bin/grep -q '"status"[[:space:]]*:[[:space:]]*"running"'; then
+            print_mark ok 'Builder container running'
+          else
+            print_mark fail 'Builder container not running'
+            exit 1
+          fi
+
+          while [ "$readiness_attempt" -le 3 ]; do
+            if ${readinessScript} >/dev/null 2>&1; then
+              readiness_ok=1
+              break
+            fi
+
+            readiness_attempt=$((readiness_attempt + 1))
+            if [ "$readiness_attempt" -le 3 ]; then
+              ${startScript} >/dev/null 2>&1 || true
+              /bin/sleep 2
+            fi
+          done
+
+          if [ "$readiness_ok" -eq 1 ]; then
+            print_mark ok 'SSH handshake succeeded'
+          else
+            print_mark fail 'SSH handshake failed'
+            exit 1
+          fi
+
+          if /usr/bin/ssh -F "$ssh_config" -o BatchMode=yes "$host_alias" 'nix store ping --store https://cache.nixos.org' >/dev/null 2>&1; then
+            print_mark ok 'Builder can reach cache.nixos.org'
+          else
+            print_mark fail 'Builder cannot reach cache.nixos.org'
+            exit 1
+          fi
+
+          if nix store ping --store ${escapeShellArg "${cfg.protocol}://${cfg.hostAlias}"} >/dev/null 2>&1; then
+            print_mark ok 'Host can reach remote store'
+          else
+            print_mark fail 'Host cannot reach remote store'
+            exit 1
+          fi
+
+          if [ "$recovered" = yes ]; then
+            print_mark ok 'Recovery was required'
+          else
+            print_mark skip 'Recovery not required'
+          fi
+        }
+
+        do_logs() {
+          local target="''${1:-runtime}"
+          shift || true
+          local follow=0
+          local lines=100
+
+          while [ "$#" -gt 0 ]; do
+            case "$1" in
+              -f|--follow) follow=1 ;;
+              -n) shift; lines="$1" ;;
+              *) echo "unknown logs argument: $1" >&2; exit 2 ;;
+            esac
+            shift || true
+          done
+
+          case "$target" in
+            runtime) logfile="$runtime_log" ;;
+            idle) logfile=${escapeShellArg idleLogPath} ;;
+            readiness) logfile="$readiness_log" ;;
+            bridge) logfile="$bridge_err_log" ;;
+            bridge-out) logfile="$bridge_out_log" ;;
+            boot)
+              if [ "$follow" -eq 1 ]; then
+                exec "$container_bin" logs --boot --follow "$container_name"
+              else
+                exec "$container_bin" logs --boot -n "$lines" "$container_name"
+              fi
+              ;;
+            *) echo "unknown log target: $target" >&2; exit 2 ;;
+          esac
+
+          if [ ! -f "$logfile" ]; then
+            echo "log file not found: $logfile" >&2
+            exit 1
+          fi
+
+          if [ "$follow" -eq 1 ]; then
+            exec ${pkgs.coreutils}/bin/tail -n "$lines" -f "$logfile"
+          else
+            exec ${pkgs.coreutils}/bin/tail -n "$lines" "$logfile"
+          fi
+        }
+
+        do_gc() {
+          exec /usr/bin/ssh -F "$ssh_config" "$host_alias" 'nix-collect-garbage -d'
+        }
+
+        do_reset() {
+          ${stopScript} >/dev/null 2>&1 || true
+          "$container_bin" volume delete "$overlay_volume" >/dev/null 2>&1 || true
+          "$container_bin" volume create \
+            --label ${escapeShellArg "org.nixos.container-builder.store=true"} \
+            "$overlay_volume" >/dev/null
+          ${startScript}
+          ${readinessScript}
+          render_status
+        }
+
+        do_restart() {
+          ${stopScript} >/dev/null 2>&1 || true
+          ${startScript}
+          ${readinessScript}
+          render_status
+        }
+
+        do_ssh() {
+          exec /usr/bin/ssh -F "$ssh_config" "$host_alias" "$@"
+        }
+
+        do_inspect() {
+          printf '==> launchd runtime\n'
+          launchctl print gui/$(id -u)/${runtimeAgentLabel} || true
+          printf '\n==> launchd bridge\n'
+          launchctl print gui/$(id -u)/${bridgeAgentLabel} || true
+          printf '\n==> container inspect\n'
+          status_container || true
+        }
+
+        if [ "''${1:-}" = "--help" ] || [ "''${1:-}" = "-h" ] || [ "$#" -eq 0 ]; then
+          cat <<'EOF'
+    Usage: hb <command>
+
+      status            Show builder status summary.
+      repair            Verify builder health and attempt runtime recovery.
+      logs [target]     Show logs. Targets: runtime, idle, readiness, bridge, bridge-out, boot.
+      gc                Run nix garbage collection inside the builder.
+      reset             Delete and recreate the overlay volume.
+      restart           Restart the builder container.
+      ssh               Open an SSH session to the builder.
+      inspect           Show raw launchd and container inspection data.
+    EOF
+          exit 0
+        fi
+
+        command="$1"
+        shift
+
+        case "$command" in
+          status) render_status ;;
+          repair) do_repair ;;
+          logs) do_logs "$@" ;;
+          gc) do_gc ;;
+          reset) do_reset ;;
+          restart) do_restart ;;
+          ssh) do_ssh "$@" ;;
+          inspect) do_inspect ;;
+          *) echo "unknown command: $command" >&2; exit 2 ;;
+        esac
   '';
 
   runtimeScript = pkgs.writeShellScript "hexbox-runtime" ''
@@ -750,31 +754,33 @@ EOF
     exec ssh -F ${escapeShellArg "${workDir}/ssh_config"} "$@"
   '';
 
-  containerConfigSpec = pkgs.writeText "container-builder-config.json" (builtins.toJSON {
-    inherit owner;
-    containerName = cfg.containerName;
-    hostAlias = cfg.hostAlias;
-    sshUser = cfg.sshUser;
-    listenAddress = cfg.listenAddress;
-    port = cfg.port;
-    containerPort = cfg.containerPort;
-    workingDirectory = cfg.workingDirectory;
-    image = cfg.image;
-    cpus = cfg.cpus;
-    memory = cfg.memory;
-    dns = cfg.dns;
-    bridgeEnable = cfg.bridge.enable;
-    installerVersion = cfg.installer.version;
-    protocol = cfg.protocol;
-    systems = cfg.systems;
-    supportedFeatures = cfg.supportedFeatures;
-    mandatoryFeatures = cfg.mandatoryFeatures;
-    maxJobs = cfg.maxJobs;
-    speedFactor = cfg.speedFactor;
-    autoStart = cfg.autoStart;
-    scriptVersion = containerScriptVersion;
-    inherit overlayMountDir overlayUpperDir overlayWorkDir;
-  });
+  containerConfigSpec = pkgs.writeText "container-builder-config.json" (
+    builtins.toJSON {
+      inherit owner;
+      containerName = cfg.containerName;
+      hostAlias = cfg.hostAlias;
+      sshUser = cfg.sshUser;
+      listenAddress = cfg.listenAddress;
+      port = cfg.port;
+      containerPort = cfg.containerPort;
+      workingDirectory = cfg.workingDirectory;
+      image = cfg.image;
+      cpus = cfg.cpus;
+      memory = cfg.memory;
+      dns = cfg.dns;
+      bridgeEnable = cfg.bridge.enable;
+      installerVersion = cfg.installer.version;
+      protocol = cfg.protocol;
+      systems = cfg.systems;
+      supportedFeatures = cfg.supportedFeatures;
+      mandatoryFeatures = cfg.mandatoryFeatures;
+      maxJobs = cfg.maxJobs;
+      speedFactor = cfg.speedFactor;
+      autoStart = cfg.autoStart;
+      scriptVersion = containerScriptVersion;
+      inherit overlayMountDir overlayUpperDir overlayWorkDir;
+    }
+  );
   containerVersion = builtins.substring 0 12 (builtins.baseNameOf containerConfigSpec);
   effectiveContainerName = "${cfg.containerName}-${containerVersion}";
 in
