@@ -11,7 +11,8 @@ Current design highlights:
 
 - installs Apple `container` from the official signed GitHub release package
 - configures `nix.buildMachines` for `ssh-ng://container-builder`
-- manages a durable state directory under `~/.local/state/container-builder`
+- uses a published GHCR builder image with overlay mount tooling preinstalled
+- manages a durable state directory under `~/.local/state/nac`
 - installs launch agents for the container runtime and the SSH bridge
 - configures container DNS explicitly for cache resolution
 - waits for a real SSH handshake before considering the builder ready
@@ -23,6 +24,9 @@ The flake exports:
 
 - `darwinModules.default`
 - `darwinModules.container-builder`
+
+The repo also contains a builder image definition under `images/builder` and a
+GitHub Actions workflow that publishes it to GHCR.
 
 ## Example
 
@@ -65,6 +69,19 @@ Known open areas:
 The module now exposes container DNS settings directly and defaults to public
 recursive resolvers so the builder can resolve `cache.nixos.org`.
 
+The builder keeps the container itself ephemeral, but now mounts a persistent
+Apple container volume and overlays `/nix` inside the guest. The image's built-in
+`/nix` stays as the lower layer while builder writes land in a persistent
+overlay upper layer stored in that volume.
+
+By default the module uses the published builder image:
+
+`ghcr.io/robertderose/nix-apple-container-builder:builder-latest`
+
+The module also persists a local NAR metadata cache under
+`~/.local/state/nac/cache` and mounts it into the container at
+`/var/cache/nix/narinfo`.
+
 Available options:
 
 - `services.container-builder.dns.servers`
@@ -96,8 +113,10 @@ What it handles:
 - the builder container name is derived from a derivation-backed configuration spec
 - when relevant builder settings change, the derived generation changes too
 - stale older `nix-builder-*` generations are removed automatically
+- the persistent `/nix` overlay volume is reused across builder generations so cache and build outputs survive ordinary module changes
 - the active container is stamped with its expected generation label and recreated if it drifts
 - the builder container is started as ephemeral with `--rm`
+- the builder container runs with Apple `container --init`
 
 What it cannot fully handle:
 
@@ -108,22 +127,44 @@ What it cannot fully handle:
 
 In practice, this means the module is close to idempotent for the configuration it owns, but not perfectly idempotent for every possible runtime failure inside Apple `container`.
 
+## Builder Image
+
+The default builder image extends `docker.io/nixos/nix:latest` and preinstalls
+`util-linux` so the guest has `mount` available at startup for the `/nix`
+overlay mount.
+
+The publish workflow pushes image tags to GHCR on changes under
+`images/builder/**` or on manual dispatch.
+
+Expected tags:
+
+- `ghcr.io/robertderose/nix-apple-container-builder:builder-latest`
+- `ghcr.io/robertderose/nix-apple-container-builder:builder-<git-sha>`
+
 ## Verification And Recovery
 
-After activation, the main status and verification entrypoint is:
+After activation, the main helper entrypoint is:
 
 ```bash
-container-builder-status
+nac status
 ```
 
 For full verification and recovery-aware checks, use:
 
 ```bash
-container-builder-status --verify
+nac repair
 ```
 
-With no arguments, `container-builder-status` performs a non-destructive status check.
-With `--verify`, it performs full verification and may attempt Apple container runtime recovery.
+The helper supports:
+
+- `nac status`
+- `nac repair`
+- `nac logs [runtime|readiness|bridge|bridge-out|boot]`
+- `nac gc`
+- `nac reset`
+- `nac restart`
+- `nac ssh`
+- `nac inspect`
 
 The helper checks:
 
