@@ -1,7 +1,13 @@
 FROM docker.io/nixos/nix:latest
 
-LABEL org.opencontainers.image.description="A Linux Builder for nix-darwin using Apple Containers. Uses an OverlayFS to persist nix store builds and cache" \
+LABEL org.opencontainers.image.title="nix-apple-container-builder builder image" \
+      org.opencontainers.image.description="Apple Container guest image for nix-apple-container-builder with persistent /nix overlay support." \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.url="https://github.com"
+      org.opencontainers.image.source="https://github.com/RobertDeRose/nix-apple-container-builder" \
+      org.opencontainers.image.url="https://github.com/RobertDeRose/nix-apple-container-builder" \
+      org.opencontainers.image.vendor="Robert DeRose"
 
-RUN nix --extra-experimental-features "nix-command flakes" profile add nixpkgs#util-linux
+ENV NIX_PATH=""
+
+RUN nix --extra-experimental-features "nix-command flakes" profile add nixpkgs#util-linux nixpkgs#procps \
+ && mkdir -p /var/empty /run/sshd /etc/ssh /var/cache/nix/narinfo
