@@ -1,0 +1,25 @@
+name: Lint
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  hk-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@4444d8fd7a1b92f1821c12f435db40f58b743d26 # v4.0.1
+        with:
+          install: false
+      - run: |
+          mise plugin install nix https://github.com/jbadeau/mise-nix.git
+          mise install
+      - name: Run hk across entire repo
+        run: hk check -a
