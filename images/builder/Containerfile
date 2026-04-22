@@ -9,5 +9,5 @@ LABEL org.opencontainers.image.title="nix-apple-container-builder builder image"
 
 ENV NIX_PATH=""
 
-RUN nix --extra-experimental-features "nix-command flakes" profile add nixpkgs#util-linux \
+RUN nix --extra-experimental-features "nix-command flakes" profile add nixpkgs#util-linux nixpkgs#procps \
  && mkdir -p /var/empty /run/sshd /etc/ssh /var/cache/nix/narinfo

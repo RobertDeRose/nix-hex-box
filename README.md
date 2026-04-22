@@ -18,7 +18,7 @@ Current design highlights:
 - configures container DNS explicitly for cache resolution
 - waits for a real SSH handshake before considering the builder ready
 - wakes the builder on demand and relays SSH directly to the current container IP
-- runs idle shutdown from inside the guest so active Nix builds do not depend on host-side process inspection
+- supports guest-side idle shutdown with in-container logging under `~/.local/state/nac/container-builder-idle.log`
 
 ## Module
 
@@ -118,7 +118,6 @@ What it handles:
 - stale older `nix-builder-*` generations are removed automatically
 - the persistent `/nix` overlay volume is reused across builder generations so cache and build outputs survive ordinary module changes
 - the active container is stamped with its expected generation label and recreated if it drifts
-- the builder container is started as ephemeral with `--rm`
 - the builder container runs with Apple `container --init`
 
 What it cannot fully handle:
@@ -133,8 +132,8 @@ In practice, this means the module is close to idempotent for the configuration 
 ## Builder Image
 
 The default builder image extends `docker.io/nixos/nix:latest` and preinstalls
-`util-linux` so the guest has `mount` available at startup for the `/nix`
-overlay mount.
+`util-linux` and `procps` so the guest has `mount` for the `/nix` overlay
+mount and `ps` for idle session detection.
 
 The publish workflow pushes image tags to GHCR on changes under
 `images/builder/**` or on manual dispatch.
@@ -174,10 +173,10 @@ to wake the builder and relay directly to the current container IP. The root
 daemon path can still use the localhost bridge, which remains the supported path
 for remote builds on the current host setup.
 
-When idle shutdown is enabled, the watchdog now runs inside the container rather
-than on the host. It keeps the builder alive while SSH sessions exist or while
-`nix-daemon` still has active descendant processes, then terminates `sshd` after
-the configured idle timeout so the container exits cleanly.
+When idle shutdown is enabled, the watchdog runs inside the container and logs
+its decisions to `~/.local/state/nac/container-builder-idle.log`. It resets its
+timer whenever active SSH sessions exist and terminates `sshd` after the
+configured idle timeout.
 
 The helper checks:
 
