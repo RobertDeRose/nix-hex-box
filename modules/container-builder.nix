@@ -367,7 +367,7 @@ let
   '';
 
   helperScript = pkgs.writeShellScript "hb" ''
-        set -euo pipefail
+    set -euo pipefail
 
         host_alias=${escapeShellArg cfg.hostAlias}
         ssh_config=${escapeShellArg "${workDir}/ssh_config_root"}
@@ -377,8 +377,13 @@ let
         runtime_plist="$HOME/Library/LaunchAgents/${runtimeAgentLabel}.plist"
         runtime_log=${escapeShellArg runtimeLogPath}
         readiness_log=${escapeShellArg readinessLogPath}
-        bridge_out_log=${escapeShellArg "${workDir}/hexbox-bridge.out.log"}
-        bridge_err_log=${escapeShellArg "${workDir}/hexbox-bridge.err.log"}
+    bridge_out_log=${escapeShellArg "${workDir}/hexbox-bridge.out.log"}
+    bridge_err_log=${escapeShellArg "${workDir}/hexbox-bridge.err.log"}
+
+    detect_overlay_origin_failure() {
+      "$container_bin" logs --boot -n 120 "$container_name" 2>/dev/null \
+        | ${pkgs.gnugrep}/bin/grep -q 'overlayfs: failed to verify upper root origin'
+    }
 
         print_mark() {
           case "$1" in
@@ -487,10 +492,11 @@ let
           printf '%-18s %s\n' 'overlay volume' "$overlay_volume"
         }
 
-        do_repair() {
-          local recovered=no
-          local readiness_attempt=1
-          local readiness_ok=0
+    do_repair() {
+      local recovered=no
+      local readiness_attempt=1
+      local readiness_ok=0
+      local overlay_reset=no
 
           if status_system >/dev/null; then
             print_mark ok 'Apple container system running'
@@ -526,16 +532,26 @@ let
             exit 1
           fi
 
-          while [ "$readiness_attempt" -le 3 ]; do
-            if ${readinessScript} >/dev/null 2>&1; then
-              readiness_ok=1
-              break
-            fi
+      while [ "$readiness_attempt" -le 3 ]; do
+        if ${readinessScript} >/dev/null 2>&1; then
+          readiness_ok=1
+          break
+        fi
 
-            readiness_attempt=$((readiness_attempt + 1))
-            if [ "$readiness_attempt" -le 3 ]; then
-              ${startScript} >/dev/null 2>&1 || true
-              /bin/sleep 2
+        if [ "$overlay_reset" = no ] && detect_overlay_origin_failure; then
+          print_mark fail 'Overlay volume is incompatible with the current image; resetting it'
+          overlay_reset=yes
+          ${stopScript} >/dev/null 2>&1 || true
+          "$container_bin" volume delete "$overlay_volume" >/dev/null 2>&1 || true
+          "$container_bin" volume create \
+            --label ${escapeShellArg "org.nixos.container-builder.store=true"} \
+            "$overlay_volume" >/dev/null
+        fi
+
+        readiness_attempt=$((readiness_attempt + 1))
+        if [ "$readiness_attempt" -le 3 ]; then
+          ${startScript} >/dev/null 2>&1 || true
+          /bin/sleep 2
             fi
           done
 
