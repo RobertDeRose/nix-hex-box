@@ -1,0 +1,7 @@
+FROM docker.io/nixos/nix:latest
+
+LABEL org.opencontainers.image.description="A Linux Builder for nix-darwin using Apple Containers. Uses an OverlayFS to persist nix store builds and cache" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.url="https://github.com"
+
+RUN nix --extra-experimental-features "nix-command flakes" profile add nixpkgs#util-linux

@@ -12,7 +12,7 @@ Current design highlights:
 - installs Apple `container` from the official signed GitHub release package
 - configures `nix.buildMachines` for `ssh-ng://container-builder`
 - uses a published GHCR builder image with overlay mount tooling preinstalled
-- manages a durable state directory under `~/.local/state/nac`
+- manages a durable state directory under `~/.local/state/container-builder`
 - installs launch agents for the container runtime and the SSH bridge
 - configures container DNS explicitly for cache resolution
 - waits for a real SSH handshake before considering the builder ready
@@ -71,15 +71,15 @@ recursive resolvers so the builder can resolve `cache.nixos.org`.
 
 The builder keeps the container itself ephemeral, but now mounts a persistent
 Apple container volume and overlays `/nix` inside the guest. The image's built-in
-`/nix` stays as the lower layer while builder writes land in a persistent
-overlay upper layer stored in that volume.
+`/nix` stays as the lower layer while builder writes land in a generation-scoped
+upper layer stored in that volume.
 
 By default the module uses the published builder image:
 
 `ghcr.io/robertderose/nix-apple-container-builder:builder-latest`
 
 The module also persists a local NAR metadata cache under
-`~/.local/state/nac/cache` and mounts it into the container at
+`~/.local/state/container-builder/cache` and mounts it into the container at
 `/var/cache/nix/narinfo`.
 
 Available options:
@@ -113,10 +113,9 @@ What it handles:
 - the builder container name is derived from a derivation-backed configuration spec
 - when relevant builder settings change, the derived generation changes too
 - stale older `nix-builder-*` generations are removed automatically
-- the persistent `/nix` overlay volume is reused across builder generations so cache and build outputs survive ordinary module changes
+- the persistent `/nix` overlay volume is generation-scoped so image/config changes get a fresh upper layer
 - the active container is stamped with its expected generation label and recreated if it drifts
 - the builder container is started as ephemeral with `--rm`
-- the builder container runs with Apple `container --init`
 
 What it cannot fully handle:
 
@@ -143,28 +142,20 @@ Expected tags:
 
 ## Verification And Recovery
 
-After activation, the main helper entrypoint is:
+After activation, the main status and verification entrypoint is:
 
 ```bash
-nac status
+container-builder-status
 ```
 
 For full verification and recovery-aware checks, use:
 
 ```bash
-nac repair
+container-builder-status --verify
 ```
 
-The helper supports:
-
-- `nac status`
-- `nac repair`
-- `nac logs [runtime|readiness|bridge|bridge-out|boot]`
-- `nac gc`
-- `nac reset`
-- `nac restart`
-- `nac ssh`
-- `nac inspect`
+With no arguments, `container-builder-status` performs a non-destructive status check.
+With `--verify`, it performs full verification and may attempt Apple container runtime recovery.
 
 The helper checks:
 
