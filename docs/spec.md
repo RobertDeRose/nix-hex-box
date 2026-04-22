@@ -2,85 +2,53 @@
 
 ## Current State
 
-- A real `services.container-builder` nix-darwin module now exists.
+- `services.container-builder` is a working `nix-darwin` module for an Apple Container based `aarch64-linux` Nix builder.
 - It declares:
   - `nix.buildMachines`
   - SSH config for `container-builder`
-  - helper scripts in `/Users/<username>/.local/state/container-builder`
-  - a `socat` bridge user agent
-  - a runtime user agent that starts `container system` and the builder container
+  - helper scripts in `/Users/<username>/.local/state/nac`
+  - a runtime user agent and optional bridge user agent
   - readiness checks before considering startup successful
-  - idempotent container start behavior
-- This is still an in-progress integration, not a finished replacement.
+  - idempotent builder start and generation-aware container recreation
+  - a persistent `/nix` overlay volume for the guest store
+  - guest-side idle shutdown based on active SSH sessions
+- The default image is `ghcr.io/robertderose/nix-apple-container-builder:builder-latest`.
+- The user-side SSH path wakes the builder on demand with `ProxyCommand ~/.local/state/nac/proxy.sh`.
+- The root `nix-daemon` path still uses the localhost bridge as the compatible transport for daemon-driven builds.
 
-## Remaining Work Plan
+## Runtime Model
 
-### 1. Stabilize the current bridge-based path
+- Durable state lives under `/Users/<username>/.local/state/nac`.
+- The builder container is generation-stamped and reused across restarts when possible.
+- `/nix` inside the guest is an overlay mount:
+  - lower layer from the image
+  - upper layer in the persistent Apple volume `nix-builder-store`
+- The watchdog runs inside the guest, checks `ps -ef | grep 'sshd-sessio[n]'`, and stops `sshd` after the configured idle timeout.
+- Once idle shutdown fires, the builder remains offline until the proxy path or helper starts it again.
 
-- Verify the launch agents are sufficient in a real login session.
-- Add readiness checks so startup only succeeds once SSH to the builder is actually reachable.
-- Make container startup idempotent instead of always replacing the container.
-- Capture failures cleanly in predictable logs.
+## Operational Notes
 
-### 2. Clarify lifecycle boundaries
+- Main helper entrypoint: `nac`
+- Important generated files live in `~/.local/state/nac/`, including:
+  - `init.sh`
+  - `proxy.sh`
+  - `start-container.sh`
+  - `stop-container.sh`
+  - `ssh_config`
+  - `ssh_config_root`
+  - `container-runtime.log`
+  - `container-readiness.log`
+  - `container-builder-idle.log`
+  - `init-debug.log`
+- Typical health checks:
+  - `nac status`
+  - `nac repair`
+  - `ssh container-builder true`
+  - `nix store ping --store ssh-ng://container-builder`
 
-- Decide whether the builder should be:
-  - always-on after login, or
-  - on-demand when builds start
-- If on-demand is the goal, design a small local trigger mechanism instead of keeping the container permanently running.
+## Known Constraints
 
-### 3. Durable state follow-through
-
-- Durable state has been moved to `/Users/<username>/.local/state/container-builder`.
-- Remaining work is to verify migration/activation behavior on a real machine.
-- Keep generated/runtime state separate from declarative inputs.
-
-### 4. Validate nix-daemon compatibility end-to-end
-
-- Confirm the root daemon can always reach the builder through the declared SSH alias.
-- Confirm `nix store ping --store ssh-ng://container-builder` works after activation.
-- Confirm a forced `aarch64-linux` build works without manual shell setup.
-
-### 5. Resolve networking limitations
-
-- Review container docs specifically for:
-  - port publishing semantics
-  - whether published ports require a different listen address or network mode
-  - whether current XPC/user-session limitations are expected
-- If published ports can be made reliable, remove the `socat` bridge entirely.
-- If not, keep the bridge and make that the supported design.
-
-### 6. Resolve DNS/substituter behavior inside the container
-
-- The module now passes explicit DNS settings via `container run --dns` and related flags.
-- The builder init script now configures `https://cache.nixos.org/` as a substituter.
-- Remaining work is runtime verification that Apple `container` honors the DNS settings reliably.
-- If DNS still fails at runtime, document the fallback behavior and investigate alternative network settings.
-
-### 7. Decide what "done" means for the module
-
-- Minimal done:
-  - bridge-based builder works after `darwin-rebuild switch`
-  - no manual state-directory setup
-  - real build succeeds
-- Full done:
-  - no `socat`
-  - no manual recovery
-  - durable state location
-  - on-demand lifecycle
-  - docs for activation, logs, troubleshooting
-
-## Recommended Execution Order
-
-1. Review docs for port publishing and lifecycle constraints.
-2. Make the current bridge path reliable and testable.
-3. Add readiness checks and better logging.
-4. Run real builder verification.
-5. Only then decide whether to invest in removing `socat`.
-
-## Key Open Decision
-
-Which target should be prioritized?
-
-1. Make the current `socat` workaround production-reliable first.
-2. Pause and push for direct published-port support first.
+- Apple `container` is still an external mutable runtime and can require operational recovery.
+- The root daemon path still depends on the localhost bridge rather than direct published ports.
+- Updating the builder image can require resetting the persistent overlay volume if the lower `/nix` changes incompatibly.
+- macOS virtualization only offers partial memory ballooning, so reclaimed guest memory is returned reliably when the builder stops rather than continuously while it stays running.

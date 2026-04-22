@@ -1,5 +1,5 @@
 {
-  description = "nix-darwin Apple Container builder module";
+  description = "HexBox: a nix-darwin Linux builder module";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";

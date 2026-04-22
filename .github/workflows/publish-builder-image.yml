@@ -1,4 +1,4 @@
-name: Publish Builder Image
+name: Publish HexBox Builder Image
 
 on:
   push:

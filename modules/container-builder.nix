@@ -12,29 +12,28 @@ let
   overlayUpperDir = "${overlayMountDir}/upper";
   overlayWorkDir = "${overlayMountDir}/work";
   overlayVolumeName = "${cfg.containerName}-store";
-  containerGenerationLabel = "io.github.robertderose.nac.generation";
-  runtimeAgentName = "container-builder-runtime";
-  bridgeAgentName = "container-builder-bridge";
+  containerGenerationLabel = "hexbox.generation";
+  runtimeAgentName = "hexbox-runtime";
+  bridgeAgentName = "hexbox-bridge";
   runtimeAgentLabel = "org.nixos.${runtimeAgentName}";
   bridgeAgentLabel = "org.nixos.${bridgeAgentName}";
   containerScriptVersion = "2026-04-22-guest-watchdog-1";
 
   workDir = cfg.workingDirectory;
-  cacheDir = "${workDir}/cache";
   containerExecutable = "/usr/local/bin/container";
   sshKeyPath = "${workDir}/builder_ed25519";
   hostKeyPath = "${workDir}/ssh_host_ed25519_key";
-  runtimeLogPath = "${workDir}/container-runtime.log";
-  readinessLogPath = "${workDir}/container-readiness.log";
-  idleLogPath = "${workDir}/container-builder-idle.log";
-  runtimeLaunchPath = "${workDir}/nac-runner";
-  bridgeLaunchPath = "${workDir}/nac-bridge";
+  runtimeLogPath = "${workDir}/hexbox-runtime.log";
+  readinessLogPath = "${workDir}/hexbox-readiness.log";
+  idleLogPath = "${workDir}/hexbox-idle.log";
+  runtimeLaunchPath = "${workDir}/hexbox-runner";
+  bridgeLaunchPath = "${workDir}/hexbox-bridge";
   containerInstallerPkg = pkgs.fetchurl {
     url = cfg.installer.url;
     hash = cfg.installer.hash;
   };
 
-  bootstrapKeysScript = pkgs.writeShellScript "container-builder-bootstrap-keys" ''
+  bootstrapKeysScript = pkgs.writeShellScript "hexbox-bootstrap-keys" ''
     set -euo pipefail
 
     workdir=${escapeShellArg workDir}
@@ -49,7 +48,7 @@ let
     fi
   '';
 
-  initScript = pkgs.writeShellScript "container-builder-init" ''
+  initScript = pkgs.writeShellScript "hexbox-init" ''
     set -e
     mkdir -p /config
     exec > /config/init-debug.log 2>&1
@@ -132,7 +131,7 @@ let
     EOF
 
     mkdir -p /usr/local/bin
-    cat > /usr/local/bin/container-builder-idle-watchdog << 'EOF'
+    cat > /usr/local/bin/hexbox-idle-watchdog << 'EOF'
     #!/bin/sh
     set -eu
     coreutils_bin=/root/.nix-profile/bin
@@ -142,7 +141,7 @@ let
     timeout_seconds=${toString cfg.idleShutdown.timeoutSeconds}
     interval_seconds=30
     idle_seconds=0
-    log_file=/config/container-builder-idle.log
+    log_file=/config/hexbox-idle.log
 
     touch "$log_file"
     exec >> "$log_file" 2>&1
@@ -179,21 +178,21 @@ let
       exit 0
     done
     EOF
-    chmod +x /usr/local/bin/container-builder-idle-watchdog
+    chmod +x /usr/local/bin/hexbox-idle-watchdog
 
     echo "starting nix-daemon"
     nix-daemon &
     echo "started nix-daemon pid=$!"
     ${optionalString cfg.idleShutdown.enable ''
       echo "starting idle watchdog"
-      /usr/local/bin/container-builder-idle-watchdog &
+      /usr/local/bin/hexbox-idle-watchdog &
       echo "started idle watchdog pid=$!"
     ''}
     echo "starting sshd"
     exec /root/.nix-profile/bin/sshd -D -e
   '';
 
-  proxyScript = pkgs.writeShellScript "container-builder-proxy" ''
+  proxyScript = pkgs.writeShellScript "hexbox-proxy" ''
     set -euo pipefail
 
     container_bin=${escapeShellArg cfg.containerBinary}
@@ -220,7 +219,7 @@ let
     exit 1
   '';
 
-  readinessScript = pkgs.writeShellScript "container-builder-readiness" ''
+  readinessScript = pkgs.writeShellScript "hexbox-readiness" ''
     set -euo pipefail
 
     host_alias=${escapeShellArg cfg.hostAlias}
@@ -244,7 +243,7 @@ let
     exit 1
   '';
 
-  startScript = pkgs.writeShellScript "container-builder-start" ''
+  startScript = pkgs.writeShellScript "hexbox-start" ''
     set -euo pipefail
 
     container_bin=${escapeShellArg cfg.containerBinary}
@@ -322,7 +321,6 @@ let
       -m ${escapeShellArg cfg.memory}
       -v ${escapeShellArg "${workDir}:/config"}
       -v ${escapeShellArg "${overlayVolumeName}:${overlayMountDir}"}
-      -v ${escapeShellArg "${cacheDir}:/var/cache/nix/narinfo"}
     )
 
     ${optionalString (cfg.dns.servers != [ ]) ''
@@ -359,12 +357,12 @@ let
     exec "$container_bin" "''${args[@]}"
   '';
 
-  stopScript = pkgs.writeShellScript "container-builder-stop" ''
+  stopScript = pkgs.writeShellScript "hexbox-stop" ''
     set -euo pipefail
     exec ${escapeShellArg cfg.containerBinary} rm -f ${escapeShellArg effectiveContainerName}
   '';
 
-  helperScript = pkgs.writeShellScript "nac" ''
+  helperScript = pkgs.writeShellScript "hb" ''
     set -euo pipefail
 
     host_alias=${escapeShellArg cfg.hostAlias}
@@ -375,8 +373,8 @@ let
     runtime_plist="$HOME/Library/LaunchAgents/${runtimeAgentLabel}.plist"
     runtime_log=${escapeShellArg runtimeLogPath}
     readiness_log=${escapeShellArg readinessLogPath}
-    bridge_out_log=${escapeShellArg "${workDir}/socat-bridge.out.log"}
-    bridge_err_log=${escapeShellArg "${workDir}/socat-bridge.err.log"}
+    bridge_out_log=${escapeShellArg "${workDir}/hexbox-bridge.out.log"}
+    bridge_err_log=${escapeShellArg "${workDir}/hexbox-bridge.err.log"}
 
     print_mark() {
       case "$1" in
@@ -618,8 +616,6 @@ let
       "$container_bin" volume create \
         --label ${escapeShellArg "org.nixos.container-builder.store=true"} \
         "$overlay_volume" >/dev/null
-      ${pkgs.coreutils}/bin/rm -rf ${escapeShellArg cacheDir}
-      ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg cacheDir}
       ${startScript}
       ${readinessScript}
       render_status
@@ -647,13 +643,13 @@ let
 
     if [ "''${1:-}" = "--help" ] || [ "''${1:-}" = "-h" ] || [ "$#" -eq 0 ]; then
       cat <<'EOF'
-Usage: nac <command>
+Usage: hb <command>
 
   status            Show builder status summary.
   repair            Verify builder health and attempt runtime recovery.
   logs [target]     Show logs. Targets: runtime, idle, readiness, bridge, bridge-out, boot.
   gc                Run nix garbage collection inside the builder.
-  reset             Delete and recreate the overlay volume and local cache.
+  reset             Delete and recreate the overlay volume.
   restart           Restart the builder container.
   ssh               Open an SSH session to the builder.
   inspect           Show raw launchd and container inspection data.
@@ -677,7 +673,7 @@ EOF
     esac
   '';
 
-  runtimeScript = pkgs.writeShellScript "container-builder-runtime" ''
+  runtimeScript = pkgs.writeShellScript "hexbox-runtime" ''
     set -euo pipefail
 
     workdir=${escapeShellArg workDir}
@@ -718,11 +714,11 @@ EOF
     ${readinessScript} >> "$readiness_log" 2>&1
   '';
 
-  runtimeLaunchScript = pkgs.writeShellScript "nac-runner" ''
+  runtimeLaunchScript = pkgs.writeShellScript "hexbox-runner" ''
     exec ${runtimeScript} "$@"
   '';
 
-  bridgeLaunchScript = pkgs.writeShellScript "nac-bridge" ''
+  bridgeLaunchScript = pkgs.writeShellScript "hexbox-bridge" ''
     exec ${pkgs.socat}/bin/socat \
       TCP-LISTEN:${toString cfg.port},bind=${cfg.listenAddress},reuseaddr,fork \
       EXEC:${workDir}/proxy.sh
@@ -818,8 +814,8 @@ in
 
     workingDirectory = mkOption {
       type = types.str;
-      default = "/Users/${owner}/.local/state/nac";
-      description = "Directory holding keys, helper scripts, and bridge logs.";
+      default = "/Users/${owner}/.local/state/hb";
+      description = "Directory holding persistent builder state such as keys, generated helper scripts, and logs.";
     };
 
     user = mkOption {
@@ -861,7 +857,7 @@ in
 
     image = mkOption {
       type = types.str;
-      default = "ghcr.io/robertderose/nix-apple-container-builder:builder-latest";
+      default = "ghcr.io/robertderose/nix-hex-box:builder-latest";
       description = "OCI image used for the Linux builder container.";
     };
 
@@ -1007,11 +1003,8 @@ in
       fi
 
       ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg workDir}
-      ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg cacheDir}
       /usr/sbin/chown ${escapeShellArg owner}:staff ${escapeShellArg workDir}
-      /usr/sbin/chown ${escapeShellArg owner}:staff ${escapeShellArg cacheDir}
       /bin/chmod 0700 ${escapeShellArg workDir}
-      /bin/chmod 0700 ${escapeShellArg cacheDir}
       ${pkgs.coreutils}/bin/install -m 0755 ${bootstrapKeysScript} ${escapeShellArg "${workDir}/bootstrap-keys.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${initScript} ${escapeShellArg "${workDir}/init.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${proxyScript} ${escapeShellArg "${workDir}/proxy.sh"}
@@ -1020,7 +1013,7 @@ in
       ${pkgs.coreutils}/bin/install -m 0755 ${sshWrapperScript} ${escapeShellArg "${workDir}/ssh-wrapper.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${runtimeLaunchScript} ${escapeShellArg runtimeLaunchPath}
       ${pkgs.coreutils}/bin/install -m 0755 ${bridgeLaunchScript} ${escapeShellArg bridgeLaunchPath}
-      ${pkgs.coreutils}/bin/install -m 0755 ${helperScript} /usr/local/bin/nac
+      ${pkgs.coreutils}/bin/install -m 0755 ${helperScript} /usr/local/bin/hb
       ${pkgs.coreutils}/bin/install -m 0644 ${userSshConfig} ${escapeShellArg "${workDir}/ssh_config"}
       ${pkgs.coreutils}/bin/install -m 0644 ${rootSshConfig} ${escapeShellArg "${workDir}/ssh_config_root"}
       /usr/sbin/chown ${escapeShellArg owner}:staff \
@@ -1045,8 +1038,8 @@ in
         KeepAlive = true;
         RunAtLoad = true;
         ProgramArguments = [ bridgeLaunchPath ];
-        StandardErrorPath = "${workDir}/socat-bridge.err.log";
-        StandardOutPath = "${workDir}/socat-bridge.out.log";
+        StandardErrorPath = "${workDir}/hexbox-bridge.err.log";
+        StandardOutPath = "${workDir}/hexbox-bridge.out.log";
         WorkingDirectory = workDir;
       };
       managedBy = "services.container-builder.bridge.enable";

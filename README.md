@@ -12,7 +12,7 @@ Current design highlights:
 - installs Apple `container` from the official signed GitHub release package
 - configures `nix.buildMachines` for `ssh-ng://container-builder`
 - uses a published GHCR builder image with overlay mount tooling preinstalled
-- manages a durable state directory under `~/.local/state/nac`
+- manages durable builder state under `~/.local/state/nac`
 - installs launch agents for the container runtime and the optional host-side SSH bridge
 - uses direct `ProxyCommand` via `~/.local/state/nac/proxy.sh` for user-side helper access, while the localhost bridge remains the compatible path for the root `nix-daemon`
 - configures container DNS explicitly for cache resolution
@@ -81,9 +81,12 @@ By default the module uses the published builder image:
 
 `ghcr.io/robertderose/nix-apple-container-builder:builder-latest`
 
-The module also persists a local NAR metadata cache under
-`~/.local/state/nac/cache` and mounts it into the container at
-`/var/cache/nix/narinfo`.
+File placement follows a state-focused layout:
+
+- `~/.local/state/nac`
+  - persistent SSH keys
+  - activation-managed helper scripts and SSH configs
+  - runtime and bridge logs
 
 Available options:
 
