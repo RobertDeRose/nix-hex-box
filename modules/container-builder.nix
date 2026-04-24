@@ -8,16 +8,12 @@ with lib;
 let
   cfg = config.services.container-builder;
   owner = cfg.user;
-  overlayMountDir = "/nix-overlay";
-  overlayUpperDir = "${overlayMountDir}/upper";
-  overlayWorkDir = "${overlayMountDir}/work";
-  overlayVolumeName = "${cfg.containerName}-store";
   containerGenerationLabel = "hexbox.generation";
   runtimeAgentName = "hexbox-runtime";
   bridgeAgentName = "hexbox-bridge";
   runtimeAgentLabel = "org.nixos.${runtimeAgentName}";
   bridgeAgentLabel = "org.nixos.${bridgeAgentName}";
-  containerScriptVersion = "2026-04-22-guest-watchdog-1";
+  containerScriptVersion = "2026-04-24-drop-overlay-1";
 
   workDir = cfg.workingDirectory;
   containerExecutable = "/usr/local/bin/container";
@@ -55,19 +51,6 @@ let
     set -x
     unset NIX_PATH
     export PATH="/root/.nix-profile/bin:$PATH"
-
-    overlay_root=${escapeShellArg overlayMountDir}
-    overlay_upper=${escapeShellArg overlayUpperDir}
-    overlay_work=${escapeShellArg overlayWorkDir}
-
-    # Preserve the image's built-in /nix as the lower layer and keep builder
-    # writes in a persistent Apple container volume mounted at $overlay_root.
-    mkdir -p "$overlay_root" "$overlay_upper" /nix-lower /nix-merged
-    rm -rf "$overlay_work"
-    mkdir -p "$overlay_work"
-    mount --bind /nix /nix-lower
-    mount -t overlay overlay -o "lowerdir=/nix-lower,upperdir=$overlay_upper,workdir=$overlay_work" /nix-merged
-    mount --move /nix-merged /nix
 
     if ! id builder > /dev/null 2>&1; then
       echo "builder:x:1000:1000:builder:/home/builder:/bin/sh" >> /etc/passwd
@@ -250,7 +233,6 @@ let
     workdir=${escapeShellArg workDir}
     container_base=${escapeShellArg cfg.containerName}
     container_name=${escapeShellArg effectiveContainerName}
-    overlay_volume=${escapeShellArg overlayVolumeName}
 
     if [ ! -f "$workdir/builder_ed25519" ] || [ ! -f "$workdir/ssh_host_ed25519_key" ]; then
       echo "container-builder keys missing in $workdir; run $workdir/bootstrap-keys.sh first" >&2
@@ -304,13 +286,6 @@ let
       "$container_bin" rm -f "$container_name" >/dev/null 2>&1 || true
     fi
 
-    if ! "$container_bin" volume inspect "$overlay_volume" >/dev/null 2>&1; then
-      echo "creating persistent builder overlay volume $overlay_volume"
-      "$container_bin" volume create \
-        --label ${escapeShellArg "org.nixos.container-builder.store=true"} \
-        "$overlay_volume" >/dev/null
-    fi
-
     args=(
       run
       -d
@@ -320,7 +295,6 @@ let
       --cpus ${escapeShellArg (toString cfg.cpus)}
       -m ${escapeShellArg cfg.memory}
       -v ${escapeShellArg "${workDir}:/config"}
-      -v ${escapeShellArg "${overlayVolumeName}:${overlayMountDir}"}
     )
 
     ${optionalString (cfg.dns.servers != [ ]) ''
@@ -373,17 +347,11 @@ let
         ssh_config=${escapeShellArg "${workDir}/ssh_config_root"}
         container_bin=${escapeShellArg cfg.containerBinary}
         container_name=${escapeShellArg effectiveContainerName}
-        overlay_volume=${escapeShellArg overlayVolumeName}
         runtime_plist="$HOME/Library/LaunchAgents/${runtimeAgentLabel}.plist"
         runtime_log=${escapeShellArg runtimeLogPath}
         readiness_log=${escapeShellArg readinessLogPath}
     bridge_out_log=${escapeShellArg "${workDir}/hexbox-bridge.out.log"}
     bridge_err_log=${escapeShellArg "${workDir}/hexbox-bridge.err.log"}
-
-    detect_overlay_origin_failure() {
-      "$container_bin" logs --boot -n 120 "$container_name" 2>/dev/null \
-        | ${pkgs.gnugrep}/bin/grep -q 'overlayfs: failed to verify upper root origin'
-    }
 
         print_mark() {
           case "$1" in
@@ -489,14 +457,12 @@ let
           printf '%-18s %s\n' 'builder container' "$container_state"
           printf '%-18s %s\n' 'ssh handshake' "$ssh_state"
           printf '%-18s %s\n' 'remote store' "$remote_state"
-          printf '%-18s %s\n' 'overlay volume' "$overlay_volume"
         }
 
     do_repair() {
       local recovered=no
       local readiness_attempt=1
       local readiness_ok=0
-      local overlay_reset=no
 
           if status_system >/dev/null; then
             print_mark ok 'Apple container system running'
@@ -536,16 +502,6 @@ let
         if ${readinessScript} >/dev/null 2>&1; then
           readiness_ok=1
           break
-        fi
-
-        if [ "$overlay_reset" = no ] && detect_overlay_origin_failure; then
-          print_mark fail 'Overlay volume is incompatible with the current image; resetting it'
-          overlay_reset=yes
-          ${stopScript} >/dev/null 2>&1 || true
-          "$container_bin" volume delete "$overlay_volume" >/dev/null 2>&1 || true
-          "$container_bin" volume create \
-            --label ${escapeShellArg "org.nixos.container-builder.store=true"} \
-            "$overlay_volume" >/dev/null
         fi
 
         readiness_attempt=$((readiness_attempt + 1))
@@ -632,10 +588,6 @@ let
 
         do_reset() {
           ${stopScript} >/dev/null 2>&1 || true
-          "$container_bin" volume delete "$overlay_volume" >/dev/null 2>&1 || true
-          "$container_bin" volume create \
-            --label ${escapeShellArg "org.nixos.container-builder.store=true"} \
-            "$overlay_volume" >/dev/null
           ${startScript}
           ${readinessScript}
           render_status
@@ -669,7 +621,7 @@ let
       repair            Verify builder health and attempt runtime recovery.
       logs [target]     Show logs. Targets: runtime, idle, readiness, bridge, bridge-out, boot.
       gc                Run nix garbage collection inside the builder.
-      reset             Delete and recreate the overlay volume.
+      reset             Destroy and recreate the builder container.
       restart           Restart the builder container.
       ssh               Open an SSH session to the builder.
       inspect           Show raw launchd and container inspection data.
@@ -794,7 +746,6 @@ let
       speedFactor = cfg.speedFactor;
       autoStart = cfg.autoStart;
       scriptVersion = containerScriptVersion;
-      inherit overlayMountDir overlayUpperDir overlayWorkDir;
     }
   );
   containerVersion = builtins.substring 0 12 (builtins.baseNameOf containerConfigSpec);

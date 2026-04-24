@@ -11,7 +11,7 @@ Current design highlights:
 
 - installs Apple `container` from the official signed GitHub release package
 - configures `nix.buildMachines` for `ssh-ng://container-builder`
-- uses a published GHCR builder image with overlay mount tooling preinstalled
+- uses a published GHCR builder image
 - manages durable builder state under `~/.local/state/hb`
 - installs launch agents for the container runtime and the optional host-side SSH bridge
 - uses direct `ProxyCommand` via `~/.local/state/hb/proxy.sh` for user-side helper access, while the localhost bridge remains the compatible path for the root `nix-daemon`
@@ -70,10 +70,9 @@ Known open areas:
 The module exposes container DNS settings directly and defaults to public
 recursive resolvers so the builder can resolve `cache.nixos.org`.
 
-The builder keeps the container generation-aware, but mounts a persistent Apple
-container volume and overlays `/nix` inside the guest. The image's built-in
-`/nix` stays as the lower layer while builder writes land in a persistent
-overlay upper layer stored in that volume.
+The builder keeps the container generation-aware. The image's built-in `/nix`
+is used directly; build outputs live in the container's writable layer and are
+re-fetched from substituters if the container is recreated.
 
 By default the module uses the published builder image:
 
@@ -110,7 +109,7 @@ What it handles:
 - the builder container name is derived from a derivation-backed configuration spec
 - when relevant builder settings change, the derived generation changes too
 - stale older `nix-builder-*` generations are removed automatically
-- the persistent `/nix` overlay volume is reused across builder generations so cache and build outputs survive ordinary module changes
+- the builder container is reused across restarts when possible; cached build outputs survive as long as the container exists
 - the active container is stamped with its expected generation label and recreated if it drifts
 - the builder container runs with Apple `container --init`
 
@@ -124,8 +123,7 @@ What it cannot fully handle:
 ## Builder Image
 
 The default builder image extends `docker.io/nixos/nix:latest` and preinstalls
-`util-linux` and `procps` so the guest has `mount` for the `/nix` overlay
-mount and `ps` for idle session detection.
+`procps` for idle session detection.
 
 The publish workflow pushes image tags to GHCR on changes under
 `images/builder/**` or on manual dispatch.

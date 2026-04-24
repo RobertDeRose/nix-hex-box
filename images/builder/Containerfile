@@ -1,13 +1,13 @@
 FROM docker.io/nixos/nix:latest
 
-LABEL org.opencontainers.image.title="nix-apple-container-builder builder image" \
-      org.opencontainers.image.description="Apple Container guest image for nix-apple-container-builder with persistent /nix overlay support." \
+LABEL org.opencontainers.image.title="nix-hex-box builder image" \
+      org.opencontainers.image.description="Apple Container guest image for nix-hex-box." \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.source="https://github.com/RobertDeRose/nix-apple-container-builder" \
-      org.opencontainers.image.url="https://github.com/RobertDeRose/nix-apple-container-builder" \
+      org.opencontainers.image.source="https://github.com/RobertDeRose/nix-hex-box" \
+      org.opencontainers.image.url="https://github.com/RobertDeRose/nix-hex-box" \
       org.opencontainers.image.vendor="Robert DeRose"
 
 ENV NIX_PATH=""
 
-RUN nix --extra-experimental-features "nix-command flakes" profile add nixpkgs#util-linux nixpkgs#procps \
+RUN nix --extra-experimental-features "nix-command flakes" profile add nixpkgs#procps \
  && mkdir -p /var/empty /run/sshd /etc/ssh /var/cache/nix/narinfo

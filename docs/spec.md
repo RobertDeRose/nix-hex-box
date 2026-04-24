@@ -10,7 +10,6 @@
   - a runtime user agent and optional bridge user agent
   - readiness checks before considering startup successful
   - idempotent builder start and generation-aware container recreation
-  - a persistent `/nix` overlay volume for the guest store
   - guest-side idle shutdown based on active SSH sessions
 - The default image is `ghcr.io/robertderose/nix-hex-box:builder-latest`.
 - The user-side SSH path wakes the builder on demand with `ProxyCommand ~/.local/state/hb/proxy.sh`.
@@ -20,9 +19,7 @@
 
 - Durable state lives under `/Users/<username>/.local/state/hb`.
 - The builder container is generation-stamped and reused across restarts when possible.
-- `/nix` inside the guest is an overlay mount:
-  - lower layer from the image
-  - upper layer in the persistent Apple volume `nix-builder-store`
+- `/nix` inside the guest uses the image's built-in store directly. Build outputs live in the container's writable layer and are lost on container recreation, but are re-fetched from cache as needed.
 - The watchdog runs inside the guest, checks `ps -ef | grep 'sshd-sessio[n]'`, and stops `sshd` after the configured idle timeout.
 - Once idle shutdown fires, the builder remains offline until the proxy path or helper starts it again.
 
@@ -52,5 +49,5 @@
 
 - Apple `container` is still an external mutable runtime and can require operational recovery.
 - The root daemon path still depends on the localhost bridge rather than direct published ports.
-- Updating the builder image can require resetting the persistent overlay volume if the lower `/nix` changes incompatibly.
+- Recreating the builder container loses any cached build outputs, but they are re-fetched from substituters on the next build.
 - macOS virtualization only offers partial memory ballooning, so reclaimed guest memory is returned reliably when the builder stops rather than continuously while it stays running.
