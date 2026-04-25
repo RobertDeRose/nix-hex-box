@@ -13,7 +13,7 @@ Current design highlights:
 - configures `nix.buildMachines` for `ssh-ng://container-builder`
 - pulls a pinned upstream `nixos/nix` builder image
 - manages durable builder state under `~/.local/state/hb`
-- installs launch agents for the container runtime and the optional host-side SSH bridge
+- installs a launch agent for the optional host-side SSH bridge
 - uses direct `ProxyCommand` via `~/.local/state/hb/proxy.sh` for user-side helper access, while the localhost bridge remains the compatible path for the root `nix-daemon`
 - configures container DNS explicitly for cache resolution
 - waits for a real SSH handshake before considering the builder ready
@@ -149,7 +149,7 @@ The helper supports:
 
 - `hb status`
 - `hb repair`
-- `hb logs [runtime|readiness|bridge|bridge-out|boot|idle]`
+- `hb logs [readiness|bridge|bridge-out|boot|idle]`
 - `hb gc`
 - `hb reset`
 - `hb restart`
@@ -174,14 +174,8 @@ The helper checks:
 - Nix cache reachability inside the builder
 - `ssh-ng://container-builder` reachability from the host daemon side
 
-If the Apple container system is hung, the helper attempts recovery by:
-
-1. unloading `~/Library/LaunchAgents/org.nixos.hexbox-runtime.plist`
-2. running `container system start --enable-kernel-install`
-3. reloading `~/Library/LaunchAgents/org.nixos.hexbox-runtime.plist`
-
-The runtime launch agent also tries to avoid a hard crash loop. If it detects
-that Apple `container` is unhealthy, it attempts recovery once and exits
-cleanly instead of repeatedly hammering launchd.
+If the Apple container system is hung, the on-demand start path and `hb repair`
+attempt recovery by running `container system start --enable-kernel-install`
+before retrying the builder container.
 
 See `docs/spec.md` for the detailed design notes.

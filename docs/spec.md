@@ -7,7 +7,7 @@
   - `nix.buildMachines`
   - SSH config for `container-builder`
   - helper scripts in `/Users/<username>/.local/state/hb`
-  - a runtime user agent and optional bridge user agent
+  - an optional bridge user agent
   - readiness checks before considering startup successful
   - idempotent builder start and generation-aware container recreation
   - guest-side idle shutdown based on active SSH sessions
@@ -34,11 +34,9 @@
   - `stop-container.sh`
   - `ssh_config`
   - `ssh_config_root`
-  - `hexbox-runtime.log`
   - `hexbox-readiness.log`
   - `hexbox-idle.log`
   - `init-debug.log`
-  - `hexbox-runner`
   - `hexbox-bridge`
 - Typical health checks:
   - `hb status`

@@ -9,21 +9,17 @@ let
   cfg = config.services.container-builder;
   owner = cfg.user;
   containerGenerationLabel = "hexbox.generation";
-  runtimeAgentName = "hexbox-runtime";
   bridgeAgentName = "hexbox-bridge";
-  runtimeAgentLabel = "org.nixos.${runtimeAgentName}";
   bridgeAgentLabel = "org.nixos.${bridgeAgentName}";
-  containerScriptVersion = "2026-04-24-upstream-image-1";
+  containerScriptVersion = "2026-04-25-on-demand-only-1";
 
   workDir = cfg.workingDirectory;
   containerExecutable = "/usr/local/bin/container";
   effectiveImage = "${cfg.imageRepository}:${cfg.nixVersion}";
   sshKeyPath = "${workDir}/builder_ed25519";
   hostKeyPath = "${workDir}/ssh_host_ed25519_key";
-  runtimeLogPath = "${workDir}/hexbox-runtime.log";
   readinessLogPath = "${workDir}/hexbox-readiness.log";
   idleLogPath = "${workDir}/hexbox-idle.log";
-  runtimeLaunchPath = "${workDir}/hexbox-runner";
   bridgeLaunchPath = "${workDir}/hexbox-bridge";
   containerInstallerPkg = pkgs.fetchurl {
     url = cfg.installer.url;
@@ -242,6 +238,16 @@ let
     container_base=${escapeShellArg cfg.containerName}
     container_name=${escapeShellArg effectiveContainerName}
 
+    if ! "$container_bin" system status >/dev/null 2>&1; then
+      echo "Apple container system unhealthy; attempting recovery" >&2
+      if ! "$container_bin" system start --enable-kernel-install >/dev/null 2>&1; then
+        echo "Apple container recovery failed" >&2
+        exit 1
+      fi
+    fi
+
+    "$container_bin" system start >/dev/null 2>&1 || true
+
     if [ ! -f "$workdir/builder_ed25519" ] || [ ! -f "$workdir/ssh_host_ed25519_key" ]; then
       echo "container-builder keys missing in $workdir; run $workdir/bootstrap-keys.sh first" >&2
       exit 1
@@ -355,8 +361,6 @@ let
         ssh_config=${escapeShellArg "${workDir}/ssh_config_root"}
         container_bin=${escapeShellArg cfg.containerBinary}
         container_name=${escapeShellArg effectiveContainerName}
-        runtime_plist="$HOME/Library/LaunchAgents/${runtimeAgentLabel}.plist"
-        runtime_log=${escapeShellArg runtimeLogPath}
         readiness_log=${escapeShellArg readinessLogPath}
     bridge_out_log=${escapeShellArg "${workDir}/hexbox-bridge.out.log"}
     bridge_err_log=${escapeShellArg "${workDir}/hexbox-bridge.err.log"}
@@ -370,15 +374,7 @@ let
         }
 
         recover_container_system() {
-          if [ -f "$runtime_plist" ]; then
-            launchctl unload "$runtime_plist" || true
-          fi
-
           "$container_bin" system start --enable-kernel-install
-
-          if [ -f "$runtime_plist" ]; then
-            launchctl load "$runtime_plist" || true
-          fi
         }
 
         status_system() {
@@ -420,7 +416,6 @@ let
           local container_state=missing
           local ssh_state=failed
           local remote_state=failed
-          local runtime_state=unknown
           local bridge_state=disabled
 
           if status_system >/dev/null; then
@@ -449,10 +444,6 @@ let
             fi
           fi
 
-          if launchctl print gui/$(id -u)/${runtimeAgentLabel} >/dev/null 2>&1; then
-            runtime_state=loaded
-          fi
-
           if launchctl print gui/$(id -u)/${bridgeAgentLabel} >/dev/null 2>&1; then
             bridge_state=loaded
           fi
@@ -460,7 +451,6 @@ let
           printf '%-18s %s\n' COMPONENT STATE
           printf '%-18s %s\n' --------- -----
           printf '%-18s %s\n' 'container system' "$system_state"
-          printf '%-18s %s\n' 'runtime agent' "$runtime_state"
           printf '%-18s %s\n' 'bridge agent' "$bridge_state"
           printf '%-18s %s\n' 'builder container' "$container_state"
           printf '%-18s %s\n' 'ssh handshake' "$ssh_state"
@@ -483,12 +473,6 @@ let
               print_mark fail 'Apple container recovery failed'
               exit 1
             fi
-          fi
-
-          if launchctl print gui/$(id -u)/${runtimeAgentLabel} >/dev/null 2>&1; then
-            print_mark ok 'Runtime agent loaded'
-          else
-            print_mark fail 'Runtime agent not loaded'
           fi
 
           if launchctl print gui/$(id -u)/${bridgeAgentLabel} >/dev/null 2>&1; then
@@ -563,7 +547,6 @@ let
           done
 
           case "$target" in
-            runtime) logfile="$runtime_log" ;;
             idle) logfile=${escapeShellArg idleLogPath} ;;
             readiness) logfile="$readiness_log" ;;
             bridge) logfile="$bridge_err_log" ;;
@@ -613,9 +596,7 @@ let
         }
 
         do_inspect() {
-          printf '==> launchd runtime\n'
-          launchctl print gui/$(id -u)/${runtimeAgentLabel} || true
-          printf '\n==> launchd bridge\n'
+          printf '==> launchd bridge\n'
           launchctl print gui/$(id -u)/${bridgeAgentLabel} || true
           printf '\n==> container inspect\n'
           status_container || true
@@ -626,8 +607,8 @@ let
     Usage: hb <command>
 
       status            Show builder status summary.
-      repair            Verify builder health and attempt runtime recovery.
-      logs [target]     Show logs. Targets: runtime, idle, readiness, bridge, bridge-out, boot.
+      repair            Verify builder health and attempt Apple container recovery.
+      logs [target]     Show logs. Targets: idle, readiness, bridge, bridge-out, boot.
       gc                Run nix garbage collection inside the builder.
       reset             Destroy and recreate the builder container.
       restart           Restart the builder container.
@@ -651,51 +632,6 @@ let
           inspect) do_inspect ;;
           *) echo "unknown command: $command" >&2; exit 2 ;;
         esac
-  '';
-
-  runtimeScript = pkgs.writeShellScript "hexbox-runtime" ''
-    set -euo pipefail
-
-    workdir=${escapeShellArg workDir}
-    log_file=${escapeShellArg runtimeLogPath}
-    readiness_log=${escapeShellArg readinessLogPath}
-    runtime_plist="$HOME/Library/LaunchAgents/${runtimeAgentLabel}.plist"
-
-    mkdir -p "$workdir"
-    exec >> "$log_file" 2>&1
-
-    echo "[$(/bin/date)] ensuring container builder runtime"
-
-    ${bootstrapKeysScript}
-
-    if ! ${escapeShellArg cfg.containerBinary} system status >/dev/null 2>&1; then
-      echo "[$(/bin/date)] Apple container system is unhealthy; attempting recovery"
-
-      if [ -f "$runtime_plist" ]; then
-        launchctl unload "$runtime_plist" || true
-      fi
-
-      if ! ${escapeShellArg cfg.containerBinary} system start --enable-kernel-install; then
-        echo "[$(/bin/date)] Apple container recovery failed; runtime agent unloaded to avoid crash loop" >&2
-        exit 0
-      fi
-    fi
-
-    ${escapeShellArg cfg.containerBinary} system start || true
-
-    if ! ${startScript}; then
-      echo "[$(/bin/date)] builder start script failed" >&2
-      exit 1
-    fi
-
-    ${escapeShellArg cfg.containerBinary} inspect ${escapeShellArg effectiveContainerName} >> "$log_file" 2>&1 || true
-    ${escapeShellArg cfg.containerBinary} logs --boot ${escapeShellArg effectiveContainerName} >> "$log_file" 2>&1 || true
-
-    ${readinessScript} >> "$readiness_log" 2>&1
-  '';
-
-  runtimeLaunchScript = pkgs.writeShellScript "hexbox-runner" ''
-    exec ${runtimeScript} "$@"
   '';
 
   bridgeLaunchScript = pkgs.writeShellScript "hexbox-bridge" ''
@@ -754,7 +690,6 @@ let
       mandatoryFeatures = cfg.mandatoryFeatures;
       maxJobs = cfg.maxJobs;
       speedFactor = cfg.speedFactor;
-      autoStart = cfg.autoStart;
       scriptVersion = containerScriptVersion;
     }
   );
@@ -938,8 +873,8 @@ in
 
     autoStart = mkOption {
       type = types.bool;
-      default = true;
-      description = "Start the Apple container system and builder container automatically via a user launch agent.";
+      default = false;
+      description = "Deprecated no-op retained for compatibility; the builder now starts only on demand.";
     };
 
     readiness.timeoutSeconds = mkOption {
@@ -1000,7 +935,6 @@ in
       ${pkgs.coreutils}/bin/install -m 0755 ${startScript} ${escapeShellArg "${workDir}/start-container.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${stopScript} ${escapeShellArg "${workDir}/stop-container.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${sshWrapperScript} ${escapeShellArg "${workDir}/ssh-wrapper.sh"}
-      ${pkgs.coreutils}/bin/install -m 0755 ${runtimeLaunchScript} ${escapeShellArg runtimeLaunchPath}
       ${pkgs.coreutils}/bin/install -m 0755 ${bridgeLaunchScript} ${escapeShellArg bridgeLaunchPath}
       ${pkgs.coreutils}/bin/install -m 0755 ${helperScript} /usr/local/bin/hb
       ${pkgs.coreutils}/bin/install -m 0644 ${userSshConfig} ${escapeShellArg "${workDir}/ssh_config"}
@@ -1012,7 +946,6 @@ in
         ${escapeShellArg "${workDir}/start-container.sh"} \
         ${escapeShellArg "${workDir}/stop-container.sh"} \
         ${escapeShellArg "${workDir}/ssh-wrapper.sh"} \
-        ${escapeShellArg runtimeLaunchPath} \
         ${escapeShellArg bridgeLaunchPath} \
         ${escapeShellArg "${workDir}/ssh_config"} \
         ${escapeShellArg "${workDir}/ssh_config_root"}
@@ -1032,22 +965,6 @@ in
         WorkingDirectory = workDir;
       };
       managedBy = "services.container-builder.bridge.enable";
-    };
-
-    launchd.user.agents."${runtimeAgentName}" = mkIf cfg.autoStart {
-      serviceConfig = {
-        ProgramArguments = [ runtimeLaunchPath ];
-        KeepAlive = {
-          SuccessfulExit = false;
-        };
-        RunAtLoad = true;
-        ThrottleInterval = 30;
-        ProcessType = "Background";
-        StandardErrorPath = "${workDir}/container-runtime.err.log";
-        StandardOutPath = "${workDir}/container-runtime.out.log";
-        WorkingDirectory = workDir;
-      };
-      managedBy = "services.container-builder.autoStart";
     };
 
     nix.distributedBuilds = true;
