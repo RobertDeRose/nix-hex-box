@@ -5,6 +5,7 @@ Activation writes the operational helper files into `~/.local/state/hb`.
 Important files include:
 
 - `bootstrap-keys.sh`
+- `hexbox-bridge`
 - `init.sh`
 - `proxy.sh`
 - `start-container.sh`
@@ -15,7 +16,6 @@ Important files include:
 - `hexbox-readiness.log`
 - `hexbox-idle.log`
 - `init-debug.log`
-- `hexbox-bridge`
 - `hb`
 
 These files are the practical runtime interface to the builder. They are

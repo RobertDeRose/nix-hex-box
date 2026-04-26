@@ -174,7 +174,7 @@ The helper checks:
 
 - `container system status`
 - current builder container inspect output
-- SSH connectivity to `container-builder`
+- SSH connectivity to `nix-builder`
 - Nix cache reachability inside the builder
 - `ssh-ng://container-builder` reachability from the host daemon side
 

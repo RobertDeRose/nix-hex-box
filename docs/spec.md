@@ -5,7 +5,7 @@
 - `services.container-builder` is a working `nix-darwin` module for an Apple Container based `aarch64-linux` Nix builder.
 - It declares:
   - `nix.buildMachines`
-  - SSH config for `container-builder`
+  - SSH config for `nix-builder` and `container-builder`
   - helper scripts in `/Users/<username>/.local/state/hb`
   - an optional bridge user agent
   - readiness checks before considering startup successful
@@ -41,7 +41,7 @@
 - Typical health checks:
   - `hb status`
   - `hb repair`
-  - `ssh container-builder true`
+  - `ssh nix-builder true`
   - `nix store ping --store ssh-ng://container-builder`
 
 ## Known Constraints

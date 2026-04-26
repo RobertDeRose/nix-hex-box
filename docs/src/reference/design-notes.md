@@ -5,7 +5,7 @@
 - upstream pinned `nixos/nix` image instead of a custom prebuilt image
 - generation-aware container recreation
 - on-demand user-side startup through `ProxyCommand`
-- optional bridge for the root daemon path
+- optional bridge for the root daemon path, with direct published-port mode available when disabled
 - guest-side idle shutdown using a lightweight watchdog
 - explicit DNS configuration support for builder cache resolution
 

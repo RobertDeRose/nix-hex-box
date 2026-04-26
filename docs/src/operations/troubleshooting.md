@@ -34,3 +34,10 @@ reachability to `cache.nixos.org`. If substitute downloads fail, check:
 
 This is expected in the current runtime model. The guest store is not preserved
 across recreation; outputs are expected to come back from substituters.
+
+## Direct port mode behaves differently from bridge mode
+
+If `bridge.enable = false`, the host connects through the directly published
+container port instead of the bridge agent. Troubleshooting should then focus on
+the published host socket and container port mapping rather than the launchd
+bridge path.

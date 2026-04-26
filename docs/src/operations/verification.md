@@ -17,7 +17,7 @@ Useful checks after activation:
 ```bash
 hb status
 hb repair
-ssh container-builder true
+ssh nix-builder true
 nix store ping --store ssh-ng://container-builder
 nix build --max-jobs 0 --rebuild nixpkgs#legacyPackages.aarch64-linux.hello
 ```
@@ -31,3 +31,11 @@ builder startup path. It also verifies:
 - SSH handshake success
 - cache reachability inside the guest
 - remote store reachability from the host side
+
+Other useful helper commands:
+
+- `hb reset`
+- `hb restart`
+- `hb ssh`
+- `hb inspect`
+- `hb gc`
