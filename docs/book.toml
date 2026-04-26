@@ -1,0 +1,15 @@
+[book]
+title = "nix-hex-box"
+description = "Apple Container based Linux remote builder for nix-darwin"
+authors = ["Robert DeRose"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "../book"
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/RobertDeRose/nix-hex-box"
+edit-url-template = "https://github.com/RobertDeRose/nix-hex-box/edit/main/docs/{path}"

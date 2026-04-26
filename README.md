@@ -7,6 +7,10 @@
 `nix-hex-box` is a `nix-darwin` module that configures an Apple Container based
 `aarch64-linux` remote builder for Nix.
 
+Documentation site:
+
+- <https://robertderose.github.io/nix-hex-box/>
+
 Current design highlights:
 
 - installs Apple `container` from the official signed GitHub release package

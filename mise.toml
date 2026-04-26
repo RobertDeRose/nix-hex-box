@@ -7,16 +7,42 @@ env_shell_expand = true
 actionlint = "latest"
 hadolint = "latest"
 hk = { version = "1.41", arch = "aarch64" }
-"nix:nixfmt" = "1.2.0"
-"npm:semantic-release" = "latest"
-"pipx:commitizen" = "latest"
+mdbook = "0.5.2"
 pkl = "latest"
 shellcheck = "latest"
 shfmt = "latest"
 tombi = "latest"
+"nix:nixfmt" = "1.2.0"
+"npm:semantic-release" = "latest"
+"pipx:commitizen" = "latest"
 
 [env]
 HK_MISE = 1
 
 [hooks]
 postinstall = "command -v hk >/dev/null && hk install --mise || true"
+
+[tasks."docs:build"]
+description = "Build the documentation site (mdBook)"
+quiet = true
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd docs
+mdbook build
+'''
+
+[tasks."docs:serve"]
+description = "Serve the documentation site locally with hot-reload"
+quiet = true
+usage = 'arg "[port]" help="Port to serve on" default="3000"'
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+PORT="${usage_port:-3000}"
+
+cd docs
+mdbook serve --port "$PORT"
+'''
