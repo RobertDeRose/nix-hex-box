@@ -15,12 +15,33 @@ let
 
   workDir = cfg.workingDirectory;
   containerExecutable = "/usr/local/bin/container";
+  hostContainerInternalDomain = "host.container.internal";
+  hostContainerInternalLoopback = "203.0.113.113";
   effectiveImage = "${cfg.imageRepository}:${cfg.nixVersion}";
   sshKeyPath = "${workDir}/builder_ed25519";
   hostKeyPath = "${workDir}/ssh_host_ed25519_key";
   readinessLogPath = "${workDir}/hexbox-readiness.log";
   idleLogPath = "${workDir}/hexbox-idle.log";
   bridgeLaunchPath = "${workDir}/hexbox-bridge";
+  reconcileHostContainerInternalScript = pkgs.writeShellScript "hexbox-reconcile-host-container-internal" ''
+    set -euo pipefail
+
+    if [ "$(/usr/bin/id -u)" -ne 0 ]; then
+      echo "must run as root" >&2
+      exit 1
+    fi
+
+    if ${boolToString cfg.exposeHostContainerInternal}; then
+      if ${escapeShellArg cfg.containerBinary} system dns list 2>/dev/null | /usr/bin/grep -qx ${escapeShellArg hostContainerInternalDomain}; then
+        ${escapeShellArg cfg.containerBinary} system dns delete ${escapeShellArg hostContainerInternalDomain}
+      fi
+      echo "configuring Apple container DNS entry for ${hostContainerInternalDomain}" >&2
+      ${escapeShellArg cfg.containerBinary} system dns create ${escapeShellArg hostContainerInternalDomain} --localhost ${escapeShellArg hostContainerInternalLoopback}
+    elif ${escapeShellArg cfg.containerBinary} system dns list 2>/dev/null | /usr/bin/grep -qx ${escapeShellArg hostContainerInternalDomain}; then
+      echo "removing Apple container DNS entry for ${hostContainerInternalDomain}" >&2
+      ${escapeShellArg cfg.containerBinary} system dns delete ${escapeShellArg hostContainerInternalDomain}
+    fi
+  '';
   containerInstallerPkg = pkgs.fetchurl {
     url = cfg.installer.url;
     hash = cfg.installer.hash;
@@ -234,6 +255,7 @@ let
     set -euo pipefail
 
     container_bin=${escapeShellArg cfg.containerBinary}
+    reconcile_host_container_internal=${escapeShellArg reconcileHostContainerInternalScript}
     workdir=${escapeShellArg workDir}
     container_base=${escapeShellArg cfg.containerName}
     container_name=${escapeShellArg effectiveContainerName}
@@ -247,6 +269,10 @@ let
     fi
 
     "$container_bin" system start >/dev/null 2>&1 || true
+
+    if [ "$(/usr/bin/id -u)" -eq 0 ]; then
+      "$reconcile_host_container_internal"
+    fi
 
     if [ ! -f "$workdir/builder_ed25519" ] || [ ! -f "$workdir/ssh_host_ed25519_key" ]; then
       echo "container-builder keys missing in $workdir; run $workdir/bootstrap-keys.sh first" >&2
@@ -361,6 +387,7 @@ let
         ssh_config=${escapeShellArg "${workDir}/ssh_config_root"}
         container_bin=${escapeShellArg cfg.containerBinary}
         container_name=${escapeShellArg effectiveContainerName}
+        reconcile_host_container_internal=${escapeShellArg "${workDir}/reconcile-host-container-internal.sh"}
         readiness_log=${escapeShellArg readinessLogPath}
     bridge_out_log=${escapeShellArg "${workDir}/hexbox-bridge.out.log"}
     bridge_err_log=${escapeShellArg "${workDir}/hexbox-bridge.err.log"}
@@ -602,6 +629,46 @@ let
           status_container || true
         }
 
+        do_host_check() {
+          local port="''${1:-}"
+          local probe_cmd
+
+          if [ -z "$port" ]; then
+            echo "usage: hb host-check <port>" >&2
+            exit 2
+          fi
+
+          case "$port" in
+            *[!0-9]*|"")
+              echo "port must be numeric: $port" >&2
+              exit 2
+              ;;
+          esac
+
+          probe_cmd="nc -zvw5 host.container.internal $port"
+
+          if ! ${boolToString cfg.exposeHostContainerInternal}; then
+            echo "host.container.internal exposure is disabled in services.container-builder.exposeHostContainerInternal" >&2
+            exit 1
+          fi
+
+          if ! status_system >/dev/null; then
+            recover_container_system >/dev/null
+          fi
+
+          if "$container_bin" run --rm docker.io/alpine:latest sh -eu -c "$probe_cmd"; then
+            exit 0
+          fi
+
+          if [ "$(/usr/bin/id -u)" -eq 0 ]; then
+            "$reconcile_host_container_internal"
+          else
+            /usr/bin/sudo "$reconcile_host_container_internal"
+          fi
+
+          exec "$container_bin" run --rm docker.io/alpine:latest sh -eu -c "$probe_cmd"
+        }
+
         if [ "''${1:-}" = "--help" ] || [ "''${1:-}" = "-h" ] || [ "$#" -eq 0 ]; then
           cat <<'EOF'
     Usage: hb <command>
@@ -614,6 +681,7 @@ let
       restart           Restart the builder container.
       ssh               Open an SSH session to the builder.
       inspect           Show raw launchd and container inspection data.
+      host-check        Verify host.container.internal reaches a host TCP port.
     EOF
           exit 0
         fi
@@ -630,6 +698,7 @@ let
           restart) do_restart ;;
           ssh) do_ssh "$@" ;;
           inspect) do_inspect ;;
+          host-check) do_host_check "$@" ;;
           *) echo "unknown command: $command" >&2; exit 2 ;;
         esac
   '';
@@ -682,6 +751,7 @@ let
       cpus = cfg.cpus;
       memory = cfg.memory;
       dns = cfg.dns;
+      exposeHostContainerInternal = cfg.exposeHostContainerInternal;
       bridgeEnable = cfg.bridge.enable;
       installerVersion = cfg.installer.version;
       protocol = cfg.protocol;
@@ -830,6 +900,12 @@ in
       description = "Disable container DNS configuration with `container run --no-dns`.";
     };
 
+    exposeHostContainerInternal = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Expose `host.container.internal` to Apple containers by managing `container system dns` during activation.";
+    };
+
     systems = mkOption {
       type = types.listOf types.str;
       default = [ "aarch64-linux" ];
@@ -926,6 +1002,12 @@ in
         /usr/sbin/installer -pkg ${escapeShellArg containerInstallerPkg} -target /
       fi
 
+      if ${escapeShellArg cfg.containerBinary} system status >/dev/null 2>&1; then
+        ${reconcileHostContainerInternalScript}
+      else
+        echo "warning: Apple container system is not running; skipping ${hostContainerInternalDomain} DNS reconciliation" >&2
+      fi
+
       ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg workDir}
       /usr/sbin/chown ${escapeShellArg owner}:staff ${escapeShellArg workDir}
       /bin/chmod 0700 ${escapeShellArg workDir}
@@ -934,6 +1016,7 @@ in
       ${pkgs.coreutils}/bin/install -m 0755 ${proxyScript} ${escapeShellArg "${workDir}/proxy.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${startScript} ${escapeShellArg "${workDir}/start-container.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${stopScript} ${escapeShellArg "${workDir}/stop-container.sh"}
+      ${pkgs.coreutils}/bin/install -m 0755 ${reconcileHostContainerInternalScript} ${escapeShellArg "${workDir}/reconcile-host-container-internal.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${sshWrapperScript} ${escapeShellArg "${workDir}/ssh-wrapper.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${bridgeLaunchScript} ${escapeShellArg bridgeLaunchPath}
       ${pkgs.coreutils}/bin/install -m 0755 ${helperScript} /usr/local/bin/hb
@@ -945,6 +1028,7 @@ in
         ${escapeShellArg "${workDir}/proxy.sh"} \
         ${escapeShellArg "${workDir}/start-container.sh"} \
         ${escapeShellArg "${workDir}/stop-container.sh"} \
+        ${escapeShellArg "${workDir}/reconcile-host-container-internal.sh"} \
         ${escapeShellArg "${workDir}/ssh-wrapper.sh"} \
         ${escapeShellArg bridgeLaunchPath} \
         ${escapeShellArg "${workDir}/ssh_config"} \

@@ -20,6 +20,7 @@ Current design highlights:
 - installs a launch agent for the optional host-side SSH bridge
 - uses direct `ProxyCommand` via `~/.local/state/hb/proxy.sh` for user-side helper access, while the localhost bridge remains the compatible path for the root `nix-daemon`
 - configures container DNS explicitly for cache resolution
+- exposes `host.container.internal` for Apple containers by default via `container system dns`
 - waits for a real SSH handshake before considering the builder ready
 - wakes the builder on demand and relays SSH directly to the current container IP
 - supports guest-side idle shutdown with in-container logging under `~/.local/state/hb/hexbox-idle.log`
@@ -94,6 +95,7 @@ Available options:
 - `services.container-builder.dns.options`
 - `services.container-builder.dns.domain`
 - `services.container-builder.dns.disable`
+- `services.container-builder.exposeHostContainerInternal`
 
 The builder container also writes a minimal `nix.conf` with
 `https://cache.nixos.org/` configured as a substituter.
@@ -106,6 +108,15 @@ services.container-builder = {
   dns.servers = [ "1.1.1.1" "8.8.8.8" ];
 };
 ```
+
+By default the module also ensures Apple's documented host alias is available:
+
+```text
+host.container.internal
+```
+
+This is managed with `container system dns create host.container.internal --localhost 203.0.113.113`.
+Set `services.container-builder.exposeHostContainerInternal = false;` to opt out.
 
 ## Idempotency
 
@@ -159,11 +170,24 @@ The helper supports:
 - `hb restart`
 - `hb ssh`
 - `hb inspect`
+- `hb host-check <port>`
 
 The helper's user-side SSH path uses `ProxyCommand ${HOME}/.local/state/hb/proxy.sh`
 to wake the builder and relay directly to the current container IP. The root
 daemon path can still use the localhost bridge, which remains the supported path
 for remote builds on the current host setup.
+
+To verify that Apple’s `host.container.internal` forwarding can reach a host
+service, run:
+
+```bash
+hb host-check 8000
+```
+
+This starts a short-lived test container and checks TCP connectivity to
+`host.container.internal:<port>`. It tries the probe first without elevation,
+then re-applies Apple's localhost forwarding with `sudo` only if the first
+probe fails.
 
 When idle shutdown is enabled, the watchdog runs inside the container and logs
 its decisions to `~/.local/state/hb/hexbox-idle.log`. It resets its timer
