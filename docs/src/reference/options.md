@@ -26,6 +26,7 @@ Important options:
 - `dns.options`
 - `dns.domain`
 - `dns.disable`
+- `exposeHostContainerInternal`
 - `systems`
 - `supportedFeatures`
 - `mandatoryFeatures`
@@ -38,6 +39,13 @@ Important options:
 - `idleShutdown.enable`
 - `idleShutdown.timeoutSeconds`
 - `bridge.enable`
+- `socktainer.enable`
+- `socktainer.binary`
+- `socktainer.homeDirectory`
+- `socktainer.setDockerHost`
+- `socktainer.installer.url`
+- `socktainer.installer.hash`
+- `socktainer.installer.version`
 
 See `modules/container-builder.nix` for the authoritative option defaults and
 types.

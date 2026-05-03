@@ -13,10 +13,15 @@ The current runtime model is:
 - the user-side SSH path wakes the builder on demand with `ProxyCommand`
 - the root `nix-daemon` path can use the localhost bridge when enabled
 - idle shutdown runs inside the guest and stops `sshd` after inactivity
+- Socktainer, when enabled, runs as a separate user launch agent and exposes a Docker-compatible Unix socket under `$HOME/.socktainer`
 
 The builder uses the image's built-in `/nix` directly. Build outputs live in
 the container's writable layer, so recreating the container loses any guest
 local store writes that were not already available from substituters.
+
+Socktainer is not part of the builder control path. It is an optional
+companion daemon for Docker-compatible local tooling on top of the same Apple
+container runtime.
 
 That design keeps the module simpler than the older overlay-based approach, but
 it also means the builder should be treated as a cache-backed disposable guest,

@@ -18,6 +18,7 @@ Current design highlights:
 - pulls a pinned upstream `nixos/nix` builder image
 - manages durable builder state under `~/.local/state/hb`
 - installs a launch agent for the optional host-side SSH bridge
+- can install and manage Socktainer as an optional Docker-compatible API layer
 - uses direct `ProxyCommand` via `~/.local/state/hb/proxy.sh` for user-side helper access, while the localhost bridge remains the compatible path for the root `nix-daemon`
 - configures container DNS explicitly for cache resolution
 - exposes `host.container.internal` for Apple containers by default via `container system dns`
@@ -51,6 +52,7 @@ Container installer version and upstream `nixos/nix` image tag.
             enable = true;
             cpus = 4;
             maxJobs = 4;
+            socktainer.enable = true;
             # Optional override if you do not want to use config.system.primaryUser.
             user = "myuser";
           };
@@ -96,6 +98,12 @@ Available options:
 - `services.container-builder.dns.domain`
 - `services.container-builder.dns.disable`
 - `services.container-builder.exposeHostContainerInternal`
+- `services.container-builder.socktainer.enable`
+- `services.container-builder.socktainer.homeDirectory`
+- `services.container-builder.socktainer.binary`
+- `services.container-builder.socktainer.installer.url`
+- `services.container-builder.socktainer.installer.hash`
+- `services.container-builder.socktainer.installer.version`
 
 The builder container also writes a minimal `nix.conf` with
 `https://cache.nixos.org/` configured as a substituter.
@@ -117,6 +125,39 @@ host.container.internal
 
 This is managed with `container system dns create host.container.internal --localhost 203.0.113.113`.
 Set `services.container-builder.exposeHostContainerInternal = false;` to opt out.
+
+## Socktainer
+
+Set `services.container-builder.socktainer.enable = true;` to install the
+official Socktainer pkg and manage a user launch agent for the current primary
+user.
+
+This exposes a Docker-compatible Unix socket at:
+
+```text
+$HOME/.socktainer/container.sock
+```
+
+Example:
+
+```bash
+export DOCKER_HOST=unix://$HOME/.socktainer/container.sock
+docker ps
+```
+
+The helper also exposes:
+
+- `hb socktainer-status`
+- `hb socktainer-logs [err|out]`
+
+To export `DOCKER_HOST` automatically for user sessions, set:
+
+```nix
+services.container-builder.socktainer = {
+  enable = true;
+  setDockerHost = true;
+};
+```
 
 ## Idempotency
 

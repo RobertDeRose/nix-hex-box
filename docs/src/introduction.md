@@ -13,6 +13,7 @@ to a local virtualized builder while keeping the host configuration declarative.
 Current design highlights:
 
 - installs Apple `container` from the official signed release package
+- can optionally install Socktainer to expose a Docker-compatible local API socket
 - configures `nix.buildMachines` for `ssh-ng://container-builder`
 - uses a pinned upstream `docker.io/nixos/nix:<version>` builder image
 - manages durable state under `~/.local/state/hb`

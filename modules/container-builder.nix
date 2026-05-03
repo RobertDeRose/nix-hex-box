@@ -7,16 +7,22 @@
 with lib;
 let
   cfg = config.services.container-builder;
+  runtimeVersions = import ./runtime-versions.nix;
   owner = cfg.user;
   containerGenerationLabel = "hexbox.generation";
   bridgeAgentName = "hexbox-bridge";
   bridgeAgentLabel = "org.nixos.${bridgeAgentName}";
+  socktainerAgentName = "hexbox-socktainer";
+  socktainerAgentLabel = "org.nixos.${socktainerAgentName}";
   containerScriptVersion = "2026-04-25-on-demand-only-1";
 
   workDir = cfg.workingDirectory;
   containerExecutable = "/usr/local/bin/container";
   hostContainerInternalDomain = "host.container.internal";
   hostContainerInternalLoopback = "203.0.113.113";
+  socktainerStateDirectory = "${cfg.socktainer.homeDirectory}/.socktainer";
+  socktainerSocketPath = "${socktainerStateDirectory}/container.sock";
+  socktainerApiUrl = "http://localhost/_ping";
   effectiveImage = "${cfg.imageRepository}:${cfg.nixVersion}";
   sshKeyPath = "${workDir}/builder_ed25519";
   hostKeyPath = "${workDir}/ssh_host_ed25519_key";
@@ -45,6 +51,10 @@ let
   containerInstallerPkg = pkgs.fetchurl {
     url = cfg.installer.url;
     hash = cfg.installer.hash;
+  };
+  socktainerInstallerPkg = pkgs.fetchurl {
+    url = cfg.socktainer.installer.url;
+    hash = cfg.socktainer.installer.hash;
   };
 
   bootstrapKeysScript = pkgs.writeShellScript "hexbox-bootstrap-keys" ''
@@ -380,6 +390,19 @@ let
     exec ${escapeShellArg cfg.containerBinary} rm -f ${escapeShellArg effectiveContainerName}
   '';
 
+  socktainerHealthScript = pkgs.writeShellScript "hexbox-socktainer-health" ''
+    set -euo pipefail
+
+    socket_path=${escapeShellArg socktainerSocketPath}
+
+    if [ ! -S "$socket_path" ]; then
+      echo "socktainer socket not found: $socket_path" >&2
+      exit 1
+    fi
+
+    exec /usr/bin/curl --silent --show-error --fail --unix-socket "$socket_path" ${escapeShellArg socktainerApiUrl}
+  '';
+
   helperScript = pkgs.writeShellScript "hb" ''
     set -euo pipefail
 
@@ -388,6 +411,8 @@ let
         container_bin=${escapeShellArg cfg.containerBinary}
         container_name=${escapeShellArg effectiveContainerName}
         reconcile_host_container_internal=${escapeShellArg "${workDir}/reconcile-host-container-internal.sh"}
+        socktainer_socket=${escapeShellArg socktainerSocketPath}
+        socktainer_health=${escapeShellArg socktainerHealthScript}
         readiness_log=${escapeShellArg readinessLogPath}
     bridge_out_log=${escapeShellArg "${workDir}/hexbox-bridge.out.log"}
     bridge_err_log=${escapeShellArg "${workDir}/hexbox-bridge.err.log"}
@@ -625,8 +650,59 @@ let
         do_inspect() {
           printf '==> launchd bridge\n'
           launchctl print gui/$(id -u)/${bridgeAgentLabel} || true
+          if launchctl print gui/$(id -u)/${socktainerAgentLabel} >/dev/null 2>&1; then
+            printf '\n==> launchd socktainer\n'
+            launchctl print gui/$(id -u)/${socktainerAgentLabel} || true
+          fi
           printf '\n==> container inspect\n'
           status_container || true
+        }
+
+        do_socktainer_status() {
+          local agent_state=disabled
+          local socket_state=missing
+          local ping_state=failed
+
+          if ! ${boolToString cfg.socktainer.enable}; then
+            echo "socktainer is disabled" >&2
+            exit 1
+          fi
+
+          if launchctl print gui/$(id -u)/${socktainerAgentLabel} >/dev/null 2>&1; then
+            agent_state=loaded
+          fi
+
+          if [ -S "$socktainer_socket" ]; then
+            socket_state=present
+          fi
+
+          if "$socktainer_health" >/dev/null 2>&1; then
+            ping_state=ok
+          fi
+
+          printf '%-18s %s\n' COMPONENT STATE
+          printf '%-18s %s\n' 'socktainer agent' "$agent_state"
+          printf '%-18s %s\n' 'socktainer socket' "$socket_state"
+          printf '%-18s %s\n' 'socktainer ping' "$ping_state"
+          printf '%-18s %s\n' 'docker host' "unix://$socktainer_socket"
+        }
+
+        do_socktainer_logs() {
+          local target="''${1:-err}"
+          local logfile
+
+          case "$target" in
+            out) logfile=${escapeShellArg "${socktainerStateDirectory}/socktainer.out.log"} ;;
+            err) logfile=${escapeShellArg "${socktainerStateDirectory}/socktainer.err.log"} ;;
+            *) echo "unknown socktainer log target: $target" >&2; exit 2 ;;
+          esac
+
+          if [ ! -f "$logfile" ]; then
+            echo "log file not found: $logfile" >&2
+            exit 1
+          fi
+
+          exec ${pkgs.coreutils}/bin/tail -n 100 "$logfile"
         }
 
         do_host_check() {
@@ -682,6 +758,8 @@ let
       ssh               Open an SSH session to the builder.
       inspect           Show raw launchd and container inspection data.
       host-check        Verify host.container.internal reaches a host TCP port.
+      socktainer-status Show Socktainer agent, socket, and API status.
+      socktainer-logs   Show Socktainer logs. Targets: err, out.
     EOF
           exit 0
         fi
@@ -699,8 +777,18 @@ let
           ssh) do_ssh "$@" ;;
           inspect) do_inspect ;;
           host-check) do_host_check "$@" ;;
+          socktainer-status) do_socktainer_status ;;
+          socktainer-logs) do_socktainer_logs "$@" ;;
           *) echo "unknown command: $command" >&2; exit 2 ;;
         esac
+  '';
+
+  socktainerLaunchScript = pkgs.writeShellScript "hexbox-socktainer" ''
+    set -euo pipefail
+
+    export HOME=${escapeShellArg cfg.socktainer.homeDirectory}
+    ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg socktainerStateDirectory}
+    exec ${escapeShellArg cfg.socktainer.binary} --no-check-compatibility
   '';
 
   bridgeLaunchScript = pkgs.writeShellScript "hexbox-bridge" ''
@@ -752,6 +840,7 @@ let
       memory = cfg.memory;
       dns = cfg.dns;
       exposeHostContainerInternal = cfg.exposeHostContainerInternal;
+      socktainer = cfg.socktainer;
       bridgeEnable = cfg.bridge.enable;
       installerVersion = cfg.installer.version;
       protocol = cfg.protocol;
@@ -821,19 +910,19 @@ in
 
     installer.url = mkOption {
       type = types.str;
-      default = "https://github.com/apple/container/releases/download/0.11.0/container-0.11.0-installer-signed.pkg";
+      default = runtimeVersions.appleContainer.url;
       description = "Official Apple container installer package URL.";
     };
 
     installer.hash = mkOption {
       type = types.str;
-      default = "sha256-kGNqRgOmaeurQZuuHh2dMijAFWxJAiY8ksGdBQMPQEo=";
+      default = runtimeVersions.appleContainer.hash;
       description = "Hash of the Apple container installer package.";
     };
 
     installer.version = mkOption {
       type = types.str;
-      default = "0.11.0";
+      default = runtimeVersions.appleContainer.version;
       description = "Expected `container --version` string suffix used for activation checks.";
     };
 
@@ -845,13 +934,13 @@ in
 
     imageRepository = mkOption {
       type = types.str;
-      default = "docker.io/nixos/nix";
+      default = runtimeVersions.nixImage.repository;
       description = "OCI repository used for the Linux builder container image.";
     };
 
     nixVersion = mkOption {
       type = types.str;
-      default = "2.34.6";
+      default = runtimeVersions.nixImage.version;
       description = "Version tag of the upstream `nixos/nix` container image used for the builder.";
     };
 
@@ -982,6 +1071,48 @@ in
       default = true;
       description = "Run a user launch agent with socat to bridge host SSH traffic into `container exec`. Disable this to use direct published ports.";
     };
+
+    socktainer.enable = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Install and manage Socktainer as an optional Docker API compatibility layer on top of Apple container.";
+    };
+
+    socktainer.binary = mkOption {
+      type = types.str;
+      default = "/opt/socktainer/bin/socktainer";
+      description = "Path to the Socktainer binary installed by its official pkg.";
+    };
+
+    socktainer.homeDirectory = mkOption {
+      type = types.str;
+      default = "/Users/${owner}";
+      description = "macOS home directory used when launching Socktainer; Socktainer stores its socket and logs under `$HOME/.socktainer`.";
+    };
+
+    socktainer.setDockerHost = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Export `DOCKER_HOST` in the user session environment so Docker-compatible clients use Socktainer by default.";
+    };
+
+    socktainer.installer.url = mkOption {
+      type = types.str;
+      default = runtimeVersions.socktainer.url;
+      description = "Official Socktainer installer package URL.";
+    };
+
+    socktainer.installer.hash = mkOption {
+      type = types.str;
+      default = runtimeVersions.socktainer.hash;
+      description = "Hash of the Socktainer installer package.";
+    };
+
+    socktainer.installer.version = mkOption {
+      type = types.str;
+      default = runtimeVersions.socktainer.version;
+      description = "Expected Socktainer release version used for activation checks.";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -994,6 +1125,10 @@ in
 
     environment.systemPackages = [ pkgs.netcat ] ++ optional cfg.bridge.enable pkgs.socat;
 
+    environment.variables = mkIf (cfg.socktainer.enable && cfg.socktainer.setDockerHost) {
+      DOCKER_HOST = "unix://${socktainerSocketPath}";
+    };
+
     environment.etc."ssh/ssh_config.d/201-container-builder.conf".source = rootSshConfig;
 
     system.activationScripts.extraActivation.text = mkAfter ''
@@ -1001,6 +1136,13 @@ in
         echo "installing Apple container ${cfg.installer.version} from official pkg..." >&2
         /usr/sbin/installer -pkg ${escapeShellArg containerInstallerPkg} -target /
       fi
+
+      ${optionalString cfg.socktainer.enable ''
+        if [ ! -x ${escapeShellArg cfg.socktainer.binary} ] || ! ${escapeShellArg cfg.socktainer.binary} --version 2>/dev/null | /usr/bin/grep -q ${escapeShellArg cfg.socktainer.installer.version}; then
+          echo "installing Socktainer ${cfg.socktainer.installer.version} from official pkg..." >&2
+          /usr/sbin/installer -pkg ${escapeShellArg socktainerInstallerPkg} -target /
+        fi
+      ''}
 
       if ${escapeShellArg cfg.containerBinary} system status >/dev/null 2>&1; then
         ${reconcileHostContainerInternalScript}
@@ -1017,6 +1159,7 @@ in
       ${pkgs.coreutils}/bin/install -m 0755 ${startScript} ${escapeShellArg "${workDir}/start-container.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${stopScript} ${escapeShellArg "${workDir}/stop-container.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${reconcileHostContainerInternalScript} ${escapeShellArg "${workDir}/reconcile-host-container-internal.sh"}
+      ${pkgs.coreutils}/bin/install -m 0755 ${socktainerLaunchScript} ${escapeShellArg "${workDir}/socktainer.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${sshWrapperScript} ${escapeShellArg "${workDir}/ssh-wrapper.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${bridgeLaunchScript} ${escapeShellArg bridgeLaunchPath}
       ${pkgs.coreutils}/bin/install -m 0755 ${helperScript} /usr/local/bin/hb
@@ -1029,10 +1172,16 @@ in
         ${escapeShellArg "${workDir}/start-container.sh"} \
         ${escapeShellArg "${workDir}/stop-container.sh"} \
         ${escapeShellArg "${workDir}/reconcile-host-container-internal.sh"} \
+        ${escapeShellArg "${workDir}/socktainer.sh"} \
         ${escapeShellArg "${workDir}/ssh-wrapper.sh"} \
         ${escapeShellArg bridgeLaunchPath} \
         ${escapeShellArg "${workDir}/ssh_config"} \
         ${escapeShellArg "${workDir}/ssh_config_root"}
+
+      ${optionalString cfg.socktainer.enable ''
+        ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg socktainerStateDirectory}
+        /usr/sbin/chown ${escapeShellArg owner}:staff ${escapeShellArg socktainerStateDirectory}
+      ''}
 
       if [ ! -e ${escapeShellArg sshKeyPath} ] || [ ! -e ${escapeShellArg "${sshKeyPath}.pub"} ] || [ ! -e ${escapeShellArg hostKeyPath} ] || [ ! -e ${escapeShellArg "${hostKeyPath}.pub"} ]; then
         echo "warning: container-builder keys are missing in ${workDir}; run ${workDir}/bootstrap-keys.sh" >&2
@@ -1049,6 +1198,18 @@ in
         WorkingDirectory = workDir;
       };
       managedBy = "services.container-builder.bridge.enable";
+    };
+
+    launchd.user.agents."${socktainerAgentName}" = mkIf cfg.socktainer.enable {
+      serviceConfig = {
+        KeepAlive = true;
+        RunAtLoad = true;
+        ProgramArguments = [ "${workDir}/socktainer.sh" ];
+        StandardErrorPath = "${socktainerStateDirectory}/socktainer.err.log";
+        StandardOutPath = "${socktainerStateDirectory}/socktainer.out.log";
+        WorkingDirectory = socktainerStateDirectory;
+      };
+      managedBy = "services.container-builder.socktainer.enable";
     };
 
     nix.distributedBuilds = true;

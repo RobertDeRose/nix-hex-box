@@ -39,3 +39,11 @@ Other useful helper commands:
 - `hb ssh`
 - `hb inspect`
 - `hb gc`
+
+If Socktainer is enabled, useful checks include:
+
+```bash
+hb socktainer-status
+hb socktainer-logs err
+DOCKER_HOST=unix://$HOME/.socktainer/container.sock docker ps
+```

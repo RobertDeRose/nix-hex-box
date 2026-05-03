@@ -9,6 +9,8 @@ services.container-builder = {
   memory = "8G";
   maxJobs = 4;
   bridge.enable = true;
+  # Optional Docker API compatibility layer:
+  # socktainer.enable = true;
 };
 ```
 
@@ -27,6 +29,7 @@ Common settings to review first:
 - `dns.*`
 - `imageRepository`
 - `nixVersion`
+- `socktainer.enable`
 
 The default image is the upstream pinned image:
 

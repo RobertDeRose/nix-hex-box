@@ -9,6 +9,8 @@
     enable = true;
     cpus = 4;
     maxJobs = 4;
+    # Optional Docker API compatibility layer on top of Apple container.
+    # socktainer.enable = true;
 
     # Optional if you want to override config.system.primaryUser.
     # user = "myuser";
