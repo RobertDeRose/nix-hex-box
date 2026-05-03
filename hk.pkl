@@ -1,6 +1,15 @@
 amends "package://github.com/jdx/hk/releases/download/v1.41.0/hk@1.41.0#/Config.pkl"
 import "package://github.com/jdx/hk/releases/download/v1.41.0/hk@1.41.0#/Builtins.pkl"
 
+local commit_message_validation: Step = new Step {
+  check =
+    #"""
+    perl -0pi -e "s/[ \t]+\$//mg; s/(?<=\S) {2,}/ /g" {{commit_msg_file}}
+    typos {{commit_msg_file}}
+    commitlint --edit {{commit_msg_file}}
+    """#
+}
+
 local linters = new Mapping<String, Step> {
   ["actionlint"] = Builtins.actionlint
   ["check_byte_order_marker"] = Builtins.check_byte_order_marker
@@ -25,7 +34,7 @@ local linters = new Mapping<String, Step> {
 }
 
 local conformity = new Mapping<String, Step> {
-  ["conventional_commit"] = Builtins.check_conventional_commit
+  ["commit_message_format"] = commit_message_validation
 }
 
 default_branch = "main"
