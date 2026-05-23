@@ -69,7 +69,13 @@ jobs:
           git checkout -B "$branch"
           git add modules/runtime-versions.nix .github/scripts/update-runtime-versions.sh
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "$subject"
-          git push --force-with-lease --set-upstream origin "$branch"
+
+          remote_branch_sha="$(git ls-remote --heads origin "$branch" | awk '{print $1}')"
+          if [ -n "$remote_branch_sha" ]; then
+            git push --force-with-lease="refs/heads/$branch:$remote_branch_sha" --set-upstream origin "$branch"
+          else
+            git push --set-upstream origin "$branch"
+          fi
 
           pr_number=$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')
 
