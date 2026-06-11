@@ -29,7 +29,8 @@ jobs:
           install: false
 
       - name: Build docs
-        run: mise x mdbook -- mise docs:build
+        run: |
+          mise x mdbook@0.5.2 -- bash -c 'cd docs && mdbook build'
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
