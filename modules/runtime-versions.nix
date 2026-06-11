@@ -1,8 +1,8 @@
 {
   appleContainer = {
-    version = "0.12.3";
-    url = "https://github.com/apple/container/releases/download/0.12.3/container-0.12.3-installer-signed.pkg";
-    hash = "sha256-g/NjEmrB8GRYjeOc1rR0NA1InBkmSSosTlnE1Uqm2OM=";
+    version = "1.0.0";
+    url = "https://github.com/apple/container/releases/download/1.0.0/container-1.0.0-installer-signed.pkg";
+    hash = "sha256-E/RfJtqUw1Sty+/h6PdjHn8SbpPF1N1qWlOKpmtPR50=";
   };
 
   socktainer = {
@@ -13,6 +13,6 @@
 
   nixImage = {
     repository = "docker.io/nixos/nix";
-    version = "2.34.6";
+    version = "2.34.7";
   };
 }
