@@ -35,8 +35,9 @@ The flake exports:
 - `darwinModules.default`
 - `darwinModules.container-builder`
 
-The repo also contains a scheduled workflow that updates the pinned Apple
-Container installer version and upstream `nixos/nix` image tag.
+The repo also contains a scheduled workflow that opens a Robborg-authored PR
+for pinned runtime-version updates, validates it, and auto-merges it after the
+lint workflow passes.
 
 ## Example
 

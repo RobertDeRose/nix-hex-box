@@ -6,14 +6,26 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   update:
     runs-on: ubuntu-latest
+    outputs:
+      pr_number: ${{ steps.update-pr.outputs.pr_number }}
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
+      - id: app-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          app-id: ${{ secrets.ROBBORG_APP_ID }}
+          private-key: ${{ secrets.ROBBORG_PRIVATE_KEY }}
+
       - uses: actions/checkout@v6
+        with:
+          token: ${{ steps.app-token.outputs.token }}
 
       - uses: cachix/install-nix-action@v31
         with:
@@ -23,7 +35,7 @@ jobs:
       - name: Check for runtime updates
         id: check
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
           bash ./.github/scripts/update-runtime-versions.sh
@@ -32,10 +44,11 @@ jobs:
         if: steps.check.outputs.updated == 'true'
         run: nix eval --json '.#darwinModules' --apply builtins.attrNames
 
-      - name: Create Pull Request
+      - id: update-pr
+        name: Create Pull Request
         if: steps.check.outputs.updated == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           APPLE_UPDATED: ${{ steps.check.outputs.apple_updated }}
           APPLE_VERSION: ${{ steps.check.outputs.apple_version }}
           CURRENT_APPLE_VERSION: ${{ steps.check.outputs.current_apple_version }}
@@ -66,9 +79,18 @@ jobs:
             fi
           } > "$body_file"
 
+          git config user.name "robborg-the-creator[bot]"
+          git config user.email "280037799+robborg-the-creator[bot]@users.noreply.github.com"
           git checkout -B "$branch"
           git add modules/runtime-versions.nix .github/scripts/update-runtime-versions.sh
-          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "$subject"
+
+          if git diff --cached --quiet; then
+            echo "Runtime versions already match the latest upstream releases"
+            echo "pr_number=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git commit -m "$subject"
 
           remote_branch_sha="$(git ls-remote --heads origin "$branch" | awk '{print $1}')"
           if [ -n "$remote_branch_sha" ]; then
@@ -77,10 +99,47 @@ jobs:
             git push --set-upstream origin "$branch"
           fi
 
-          pr_number=$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')
+          pr_number=$(gh pr list --state open --head "$branch" --json number --jq '.[0].number // empty')
 
           if [ -n "$pr_number" ]; then
             gh pr edit "$pr_number" --title "$subject" --body-file "$body_file"
           else
             gh pr create --base main --head "$branch" --title "$subject" --body-file "$body_file"
+            pr_number=$(gh pr list --state open --head "$branch" --json number --jq '.[0].number // empty')
           fi
+
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+
+  hk-runtime:
+    needs: update
+    if: needs.update.outputs.pr_number != ''
+    uses: ./.github/workflows/hk.yml
+    with:
+      ref: auto/runtime-version-update
+
+  merge-runtime-pr:
+    needs:
+      - update
+      - hk-runtime
+    if: needs.update.outputs.pr_number != ''
+    runs-on: ubuntu-latest
+    concurrency:
+      group: runtime-version-pr-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - id: app-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          app-id: ${{ secrets.ROBBORG_APP_ID }}
+          private-key: ${{ secrets.ROBBORG_PRIVATE_KEY }}
+
+      - name: Merge runtime version PR
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ needs.update.outputs.pr_number }}
+          GH_REPO: ${{ github.repository }}
+        run: gh pr merge "$PR_NUMBER" --repo "$GH_REPO" --admin --squash
