@@ -22,11 +22,16 @@ jobs:
         with:
           ref: ${{ inputs.ref != '' && inputs.ref || github.sha }}
           persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
       - uses: jdx/mise-action@4444d8fd7a1b92f1821c12f435db40f58b743d26 # v4.0.1
         with:
           install: false
-      - run: |
+      - name: Install lint tools
+        run: |
           mise plugin install nix https://github.com/jbadeau/mise-nix.git
-          mise install
+          mise install hk actionlint hadolint pkl shellcheck shfmt tombi typos nix:nixfmt
       - name: Run hk across entire repo
         run: hk check -a
