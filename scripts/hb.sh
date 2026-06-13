@@ -270,14 +270,16 @@ builder::test() {
   local -a build_args
 
   expr='
-    let
-      pkgs = (builtins.getFlake "nixpkgs").legacyPackages.aarch64-linux;
-    in
-    pkgs.hello
+    derivation {
+      name = "hexbox-builder-smoke";
+      system = "aarch64-linux";
+      builder = "/bin/sh";
+      args = [ "-c" "printf ok > $out" ];
+    }
   '
 
   builder::repair
-  print_heading '🧪' 'Remote build smoke test (nixpkgs#legacyPackages.aarch64-linux.hello)'
+  print_heading '🧪' 'Remote build smoke test (trivial aarch64-linux derivation)'
 
   output_path=$(nix eval --raw --impure --expr "(${expr}).outPath")
 
