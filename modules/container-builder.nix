@@ -244,7 +244,7 @@ let
     set -euo pipefail
 
     ${escapeShellArg "${workDir}/start-container.sh"} >/dev/null 2>&1 || true
-    exec ${escapeShellArg cfg.containerBinary} machine run -i -n ${escapeShellArg machineName} --root -- /usr/bin/nc 127.0.0.1 ${toString cfg.containerPort}
+    exec ${escapeShellArg cfg.containerBinary} machine run -i -n ${escapeShellArg machineName} --root -- /usr/bin/nc -w 60 127.0.0.1 ${toString cfg.containerPort}
   '';
 
   proxyScript = pkgs.writeShellScript "hexbox-machine-proxy" ''
@@ -308,6 +308,8 @@ let
       StrictHostKeyChecking yes
       UserKnownHostsFile ${knownHostsPath}
       LogLevel ERROR
+      ServerAliveInterval 15
+      ServerAliveCountMax 4
 
     Host ${cfg.hostAlias}
       HostName ${machineName}
@@ -318,8 +320,9 @@ let
       StrictHostKeyChecking yes
       UserKnownHostsFile ${knownHostsPath}
       LogLevel ERROR
+      ServerAliveInterval 15
+      ServerAliveCountMax 4
   '';
-
   rootSshConfig = userSshConfig;
 
   sshWrapperScript = pkgs.writeShellScript "container-builder-ssh-wrapper" ''
