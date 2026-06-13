@@ -17,7 +17,11 @@ The module declares and manages:
 
 The default image is pulled from this repository's GitHub Container Registry
 package as
-`ghcr.io/robertderose/nix-hex-box/hexbox-builder:alpine-3.22-lix-2.95.2-1`.
+`ghcr.io/robertderose/nix-hex-box/hexbox-builder:latest`.
+
+The publish workflow also emits the versioned tag
+`alpine-3.22-lix-2.95.2-1`.
+
 Users can set `services.container-builder.imageContainerfile` to build a local
 custom image instead.
 

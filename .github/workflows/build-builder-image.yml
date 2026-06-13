@@ -38,15 +38,16 @@ jobs:
           set -euo pipefail
           repository=$(nix eval --raw --expr '(import ./modules/runtime-versions.nix).builderImage.repository')
           version=$(nix eval --raw --expr '(import ./modules/runtime-versions.nix).builderImage.version')
-          lix_version=${version#*lix-}
-          lix_version=${lix_version%-*}
-          if [ -z "$repository" ] || [ -z "$version" ] || [ -z "$lix_version" ]; then
+          release_tag=$(nix eval --raw --expr '(import ./modules/runtime-versions.nix).builderImage.releaseTag')
+          lix_version=$(nix eval --raw --expr '(import ./modules/runtime-versions.nix).builderImage.lixVersion')
+          if [ -z "$repository" ] || [ -z "$version" ] || [ -z "$release_tag" ] || [ -z "$lix_version" ]; then
             echo 'failed to resolve builder image metadata' >&2
             exit 1
           fi
           {
             echo "repository=$repository"
             echo "version=$version"
+            echo "release_tag=$release_tag"
             echo "lix_version=$lix_version"
           } >> "$GITHUB_OUTPUT"
 
@@ -70,7 +71,7 @@ jobs:
             LIX_VERSION=${{ steps.image.outputs.lix_version }}
           tags: |
             ${{ steps.image.outputs.repository }}:${{ steps.image.outputs.version }}
-            ${{ steps.image.outputs.repository }}:latest
+            ${{ steps.image.outputs.repository }}:${{ steps.image.outputs.release_tag }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=HexBox Lix remote builder image

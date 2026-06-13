@@ -82,7 +82,7 @@ Known open areas:
 The module uses the HexBox builder image published by this repository by default:
 
 ```text
-ghcr.io/robertderose/nix-hex-box/hexbox-builder:alpine-3.22-lix-2.95.2-1
+ghcr.io/robertderose/nix-hex-box/hexbox-builder:latest
 ```
 
 The image contains Alpine 3.22, OpenSSH, sudo, and Lix. The module creates a
@@ -92,6 +92,9 @@ host-specific SSH keys, `nix.conf`, sudoers rule, and idle timeout.
 GitHub Actions rebuilds and publishes the default image on the same weekly
 schedule as the runtime-version updater and whenever the image definition
 changes on `main`.
+
+The workflow also publishes the immutable release tag
+`alpine-3.22-lix-2.95.2-1` for users who prefer to pin.
 
 The builder uses `ssh-ng`. The host SSH path is a generated `ProxyCommand` that
 runs Apple `container machine run -i ... nc 127.0.0.1 22`, so the machine starts

@@ -33,8 +33,11 @@ The default image is pulled from this repository's GitHub Container Registry
 package:
 
 ```text
-ghcr.io/robertderose/nix-hex-box/hexbox-builder:alpine-3.22-lix-2.95.2-1
+ghcr.io/robertderose/nix-hex-box/hexbox-builder:latest
 ```
+
+The same image is also published with the versioned tag
+`alpine-3.22-lix-2.95.2-1` for users who prefer a pinned image.
 
 The image contains Alpine 3.22, OpenSSH, sudo, and Lix. Set
 `imageContainerfile` to build a local custom image instead. Runtime
