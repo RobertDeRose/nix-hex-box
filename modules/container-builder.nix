@@ -16,6 +16,9 @@ let
   hostContainerInternalLoopback = "203.0.113.113";
   socktainerAgentName = "hexbox-socktainer";
   socktainerAgentLabel = "org.nixos.${socktainerAgentName}";
+  machineProxyAgentName = "hexbox-machine-proxy";
+  machineProxySocketPath = "${workDir}/machine-proxy.sock";
+  machineProxyLogPath = "${workDir}/machine-proxy.err.log";
   socktainerStateDirectory = "${cfg.socktainer.homeDirectory}/.socktainer";
   socktainerSocketPath = "${socktainerStateDirectory}/container.sock";
   socktainerApiUrl = "http://localhost/_ping";
@@ -162,6 +165,21 @@ let
       exec /usr/bin/sudo -n -u ${escapeShellArg owner} -H "$0"
     fi
 
+    lock_dir=${escapeShellArg "${workDir}/start.lock"}
+    lock_pid_file="$lock_dir/pid"
+    while ! /bin/mkdir "$lock_dir" 2>/dev/null; do
+      lock_pid=""
+      if [ -f "$lock_pid_file" ]; then
+        lock_pid="$(/bin/cat "$lock_pid_file" 2>/dev/null || true)"
+      fi
+      if [ -z "$lock_pid" ] || ! /bin/kill -0 "$lock_pid" 2>/dev/null; then
+        /bin/rm -f "$lock_pid_file" 2>/dev/null || true
+        /bin/rmdir "$lock_dir" 2>/dev/null || true
+      fi
+      /bin/sleep 0.1
+    done
+    printf '%s\n' "$$" > "$lock_pid_file"
+    trap '/bin/rm -f "$lock_pid_file"; /bin/rmdir "$lock_dir"' EXIT
     container_bin=${escapeShellArg cfg.containerBinary}
     machine_name=${escapeShellArg machineName}
     image_tag=${escapeShellArg builderImageTag}
@@ -195,16 +213,13 @@ let
         --home-mount ${escapeShellArg cfg.homeMount}
       "$bootstrap_machine"
       "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
-      "$container_bin" machine run -n "$machine_name" --root -- true >/dev/null
+      "$container_bin" machine run -i -n "$machine_name" --root -- true </dev/null >/dev/null
     else
       "$container_bin" machine set -n "$machine_name" \
         cpus=${escapeShellArg (toString cfg.cpus)} \
         memory=${escapeShellArg cfg.memory} \
         home-mount=${escapeShellArg cfg.homeMount} >/dev/null
-      "$container_bin" machine run -n "$machine_name" --root -- true >/dev/null
-      "$bootstrap_machine"
-      "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
-      "$container_bin" machine run -n "$machine_name" --root -- true >/dev/null
+      "$container_bin" machine run -i -n "$machine_name" --root -- true </dev/null >/dev/null
     fi
   '';
 
@@ -225,15 +240,17 @@ let
     exec ${escapeShellArg "${workDir}/start-container.sh"}
   '';
 
-  proxyScript = pkgs.writeShellScript "hexbox-machine-proxy" ''
+  proxyServerScript = pkgs.writeShellScript "hexbox-machine-proxy-server" ''
     set -euo pipefail
-
-    if [ "$(/usr/bin/id -un)" != ${escapeShellArg owner} ]; then
-      exec /usr/bin/sudo -n -u ${escapeShellArg owner} -H /bin/sh -lc 'exec "$0"' "$0"
-    fi
 
     ${escapeShellArg "${workDir}/start-container.sh"} >/dev/null 2>&1 || true
     exec ${escapeShellArg cfg.containerBinary} machine run -i -n ${escapeShellArg machineName} --root -- /usr/bin/nc 127.0.0.1 ${toString cfg.containerPort}
+  '';
+
+  proxyScript = pkgs.writeShellScript "hexbox-machine-proxy" ''
+    set -euo pipefail
+
+    exec ${pkgs.socat}/bin/socat - UNIX-CONNECT:${escapeShellArg machineProxySocketPath} 2>>${escapeShellArg machineProxyLogPath}
   '';
 
   readinessScript = pkgs.writeShellScript "hexbox-readiness" ''
@@ -608,6 +625,8 @@ in
         /usr/sbin/installer -pkg ${escapeShellArg containerInstallerPkg} -target /
       fi
 
+      /bin/rm -f /etc/ssh/ssh_config.d/201-container-builder-socat.conf
+
       ${optionalString cfg.socktainer.enable ''
         if [ ! -x ${escapeShellArg cfg.socktainer.binary} ] || ! ${escapeShellArg cfg.socktainer.binary} --version 2>/dev/null | /usr/bin/grep -q ${escapeShellArg cfg.socktainer.installer.version}; then
           echo "installing Socktainer ${cfg.socktainer.installer.version} from official pkg..." >&2
@@ -632,6 +651,7 @@ in
       ${pkgs.coreutils}/bin/install -m 0755 ${bootstrapKeysScript} ${escapeShellArg "${workDir}/bootstrap-keys.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${machineBootstrapScript} ${escapeShellArg "${workDir}/bootstrap-machine.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${proxyScript} ${escapeShellArg "${workDir}/proxy.sh"}
+      ${pkgs.coreutils}/bin/install -m 0755 ${proxyServerScript} ${escapeShellArg "${workDir}/proxy-server.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${startScript} ${escapeShellArg "${workDir}/start-container.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${stopScript} ${escapeShellArg "${workDir}/stop-container.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${resetScript} ${escapeShellArg "${workDir}/reset-container.sh"}
@@ -660,6 +680,24 @@ in
         echo "warning: container-builder keys are missing in ${workDir}; run ${workDir}/bootstrap-keys.sh" >&2
       fi
     '';
+
+    launchd.user.agents."${machineProxyAgentName}" = {
+      serviceConfig = {
+        ProgramArguments = [ "${workDir}/proxy-server.sh" ];
+        Sockets = {
+          Listeners = {
+            SockPathName = machineProxySocketPath;
+            SockPathMode = 384;
+          };
+        };
+        inetdCompatibility = {
+          Wait = false;
+        };
+        StandardErrorPath = machineProxyLogPath;
+        WorkingDirectory = workDir;
+      };
+      managedBy = "services.container-builder.enable";
+    };
 
     launchd.user.agents."${socktainerAgentName}" = mkIf cfg.socktainer.enable {
       serviceConfig = {
