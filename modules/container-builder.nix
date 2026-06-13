@@ -9,27 +9,35 @@ let
   cfg = config.services.container-builder;
   runtimeVersions = import ./runtime-versions.nix;
   owner = cfg.user;
-  containerGenerationLabel = "hexbox.generation";
-  bridgeAgentName = "hexbox-bridge";
-  bridgeAgentLabel = "org.nixos.${bridgeAgentName}";
-  socktainerAgentName = "hexbox-socktainer";
-  socktainerAgentLabel = "org.nixos.${socktainerAgentName}";
-  containerScriptVersion = "2026-04-25-on-demand-only-1";
 
   workDir = cfg.workingDirectory;
   containerExecutable = "/usr/local/bin/container";
   hostContainerInternalDomain = "host.container.internal";
   hostContainerInternalLoopback = "203.0.113.113";
+  socktainerAgentName = "hexbox-socktainer";
+  socktainerAgentLabel = "org.nixos.${socktainerAgentName}";
   socktainerStateDirectory = "${cfg.socktainer.homeDirectory}/.socktainer";
   socktainerSocketPath = "${socktainerStateDirectory}/container.sock";
   socktainerApiUrl = "http://localhost/_ping";
-  effectiveImage = "${cfg.imageRepository}:${cfg.nixVersion}";
   sshKeyPath = "${workDir}/builder_ed25519";
   hostKeyPath = "${workDir}/ssh_host_ed25519_key";
   knownHostsPath = "${workDir}/known_hosts";
   readinessLogPath = "${workDir}/hexbox-readiness.log";
   idleLogPath = "${workDir}/hexbox-idle.log";
-  bridgeLaunchPath = "${workDir}/hexbox-bridge";
+  machineName = cfg.containerName;
+  builderImageTag = "${cfg.imageRepository}:${cfg.nixVersion}";
+  remoteStore = "${cfg.protocol}://${cfg.hostAlias}";
+
+  containerInstallerPkg = pkgs.fetchurl {
+    url = cfg.installer.url;
+    hash = cfg.installer.hash;
+  };
+
+  socktainerInstallerPkg = pkgs.fetchurl {
+    url = cfg.socktainer.installer.url;
+    hash = cfg.socktainer.installer.hash;
+  };
+
   reconcileHostContainerInternalScript = pkgs.writeShellScript "hexbox-reconcile-host-container-internal" ''
     set -euo pipefail
 
@@ -50,57 +58,167 @@ let
       ${escapeShellArg cfg.containerBinary} system dns delete ${escapeShellArg hostContainerInternalDomain}
     fi
   '';
-  containerInstallerPkg = pkgs.fetchurl {
-    url = cfg.installer.url;
-    hash = cfg.installer.hash;
-  };
-  socktainerInstallerPkg = pkgs.fetchurl {
-    url = cfg.socktainer.installer.url;
-    hash = cfg.socktainer.installer.hash;
-  };
 
   bootstrapKeysScript = pkgs.writeShellScript "hexbox-bootstrap-keys" ''
-        set -euo pipefail
+    set -euo pipefail
 
-        workdir=${escapeShellArg workDir}
-        known_hosts_path=${escapeShellArg knownHostsPath}
-        mkdir -p "$workdir"
+    workdir=${escapeShellArg workDir}
+    known_hosts_path=${escapeShellArg knownHostsPath}
+    mkdir -p "$workdir"
 
-        if [ ! -f "$workdir/builder_ed25519" ]; then
-          /usr/bin/ssh-keygen -t ed25519 -f "$workdir/builder_ed25519" -N "" -C ${escapeShellArg cfg.hostAlias}
-        fi
-
-        if [ ! -f "$workdir/ssh_host_ed25519_key" ]; then
-          /usr/bin/ssh-keygen -t ed25519 -f "$workdir/ssh_host_ed25519_key" -N "" -C ${escapeShellArg "${effectiveContainerName}-host"}
-        fi
-
-        if [ -f "$workdir/ssh_host_ed25519_key.pub" ]; then
-          host_key=$(/usr/bin/cut -d ' ' -f 1-2 "$workdir/ssh_host_ed25519_key.pub")
-          /bin/cat > "$known_hosts_path" <<EOF
-    ${cfg.hostAlias},nix-builder,[${cfg.listenAddress}]:${toString cfg.port} $host_key
-    EOF
-          /bin/chmod 0644 "$known_hosts_path"
-        fi
-  '';
-
-  initScript = pkgs.writeShellScript "hexbox-init" ''
-    set -e
-    mkdir -p /config
-    exec > /config/init-debug.log 2>&1
-    set -x
-    unset NIX_PATH
-    export PATH="/root/.nix-profile/bin:/bin:/sbin:/usr/bin:/usr/local/bin:$PATH"
-
-    if ! id builder > /dev/null 2>&1; then
-      echo "builder:x:1000:1000:builder:/home/builder:/bin/sh" >> /etc/passwd
-      echo "builder:x:1000:" >> /etc/group
-      mkdir -p /home/builder
-      chown 1000:1000 /home/builder
+    if [ ! -f "$workdir/builder_ed25519" ]; then
+      /usr/bin/ssh-keygen -t ed25519 -f "$workdir/builder_ed25519" -N "" -C ${escapeShellArg cfg.hostAlias}
     fi
 
-    mkdir -p /etc/nix
-    cat > /etc/nix/nix.conf << 'EOF'
-    trusted-users = root builder
+    if [ ! -f "$workdir/ssh_host_ed25519_key" ]; then
+      /usr/bin/ssh-keygen -t ed25519 -f "$workdir/ssh_host_ed25519_key" -N "" -C ${escapeShellArg "${machineName}-host"}
+    fi
+
+    if [ -f "$workdir/ssh_host_ed25519_key.pub" ]; then
+      host_key=$(/usr/bin/cut -d ' ' -f 1-2 "$workdir/ssh_host_ed25519_key.pub")
+      /bin/cat > "$known_hosts_path" <<EOF
+    ${cfg.hostAlias},nix-builder,${machineName} $host_key
+    EOF
+      /bin/chmod 0644 "$known_hosts_path"
+    fi
+  '';
+
+  builderImageContainerfile = pkgs.writeText "hexbox-builder-Containerfile" ''
+    FROM alpine:3.22
+
+    RUN apk add --no-cache \
+          bash \
+          ca-certificates \
+          coreutils \
+          curl \
+          findutils \
+          gcompat \
+          iproute2 \
+          netcat-openbsd \
+          openssh-client \
+          openssh-server \
+          procps \
+          shadow \
+          sudo \
+          tar \
+          xz
+
+    SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+    RUN curl -sSf -L https://install.lix.systems/lix | sh -s -- install linux --no-confirm --init none
+
+    RUN mkdir -p /etc/hexbox /etc/machine /run/sshd /usr/local/bin /var/empty && \
+        adduser -D -s /bin/bash builder && \
+        passwd -d builder
+
+    RUN cat > /etc/machine/create-user.sh <<'EOF'
+    #!/bin/sh
+    set -eu
+    group_name=$(getent group "$CONTAINER_GID" | cut -d: -f1 || true)
+    if [ -z "$group_name" ]; then
+      group_name="$CONTAINER_USER"
+      addgroup -g "$CONTAINER_GID" "$group_name"
+    fi
+    if ! id "$CONTAINER_USER" >/dev/null 2>&1; then
+      adduser -D -u "$CONTAINER_UID" -G "$group_name" -h "/home/$CONTAINER_USER" -s /bin/bash "$CONTAINER_USER"
+      passwd -d "$CONTAINER_USER" >/dev/null 2>&1 || true
+    fi
+    EOF
+    RUN chmod 0755 /etc/machine/create-user.sh
+
+    RUN cat > /usr/local/bin/hexbox-nix-daemon <<'EOF'
+    #!/bin/sh
+    set -eu
+    if [ "$(id -u)" -eq 0 ]; then
+      exec /nix/var/nix/profiles/default/bin/nix-daemon "$@"
+    fi
+    exec sudo -n /nix/var/nix/profiles/default/bin/nix-daemon "$@"
+    EOF
+    RUN chmod 0755 /usr/local/bin/hexbox-nix-daemon && \
+        ln -sf /usr/local/bin/hexbox-nix-daemon /usr/local/bin/nix-daemon
+
+    RUN cat > /usr/local/bin/hexbox-idle-watchdog <<'EOF'
+    #!/bin/sh
+    set -eu
+    timeout_seconds=300
+    if [ -f /etc/hexbox/idle-timeout-seconds ]; then
+      timeout_seconds=$(cat /etc/hexbox/idle-timeout-seconds)
+    fi
+    interval_seconds=30
+    idle_seconds=0
+    log_file=/var/log/hexbox-idle.log
+    touch "$log_file"
+    exec >> "$log_file" 2>&1
+    echo "[$(date)] idle watchdog started timeout=$timeout_seconds"
+
+    while true; do
+      sleep "$interval_seconds"
+      if ss -H -tn state established '( sport = :22 )' 2>/dev/null | grep -q .; then
+        idle_seconds=0
+        echo "[$(date)] active ssh connection detected"
+        continue
+      fi
+      idle_seconds=$((idle_seconds + interval_seconds))
+      echo "[$(date)] idle=$idle_seconds"
+      if [ "$idle_seconds" -ge "$timeout_seconds" ]; then
+        echo "[$(date)] idle timeout reached; stopping sshd"
+        sshd_pid=$(cat /run/sshd/sshd.pid 2>/dev/null || true)
+        if [ -n "$sshd_pid" ] && kill -0 "$sshd_pid" 2>/dev/null; then
+          kill -TERM "$sshd_pid"
+        fi
+        exit 0
+      fi
+    done
+    EOF
+    RUN chmod 0755 /usr/local/bin/hexbox-idle-watchdog
+
+    RUN rm -f /sbin/init
+    RUN cat > /sbin/init <<'EOF'
+    #!/bin/sh
+    set -eu
+    mkdir -p /run/sshd /var/empty /var/log
+    ssh-keygen -A >/dev/null 2>&1 || true
+    /nix/var/nix/profiles/default/bin/nix-daemon >/var/log/nix-daemon.log 2>&1 &
+    if [ "$(cat /etc/hexbox/idle-enable 2>/dev/null || echo true)" = true ]; then
+      /usr/local/bin/hexbox-idle-watchdog &
+    fi
+    exec /usr/sbin/sshd -D -e
+    EOF
+    RUN chmod 0755 /sbin/init
+  '';
+
+  machineBootstrapScript = pkgs.writeShellScript "hexbox-bootstrap-machine" ''
+    set -euo pipefail
+
+    container_bin=${escapeShellArg cfg.containerBinary}
+    machine_name=${escapeShellArg machineName}
+    workdir=${escapeShellArg workDir}
+    timeout_seconds=${escapeShellArg (toString cfg.idleShutdown.timeoutSeconds)}
+    idle_enable=${boolToString cfg.idleShutdown.enable}
+
+    if [ ! -f "$workdir/builder_ed25519.pub" ] || [ ! -f "$workdir/ssh_host_ed25519_key" ]; then
+      echo "container-builder keys missing in $workdir; run $workdir/bootstrap-keys.sh first" >&2
+      exit 1
+    fi
+
+    auth_key_b64=$(/usr/bin/base64 < "$workdir/builder_ed25519.pub" | /usr/bin/tr -d '\n')
+    host_key_b64=$(/usr/bin/base64 < "$workdir/ssh_host_ed25519_key" | /usr/bin/tr -d '\n')
+    host_key_pub_b64=$(/usr/bin/base64 < "$workdir/ssh_host_ed25519_key.pub" | /usr/bin/tr -d '\n')
+
+    "$container_bin" machine run -i -n "$machine_name" --root -- /bin/bash -s <<EOF
+    set -euo pipefail
+
+    mkdir -p /etc/hexbox /etc/nix /etc/ssh /home/${cfg.sshUser}/.ssh /run/sshd /var/log
+    printf '%s' '$auth_key_b64' | base64 -d > /home/${cfg.sshUser}/.ssh/authorized_keys
+    printf '%s' '$host_key_b64' | base64 -d > /etc/ssh/ssh_host_ed25519_key
+    printf '%s' '$host_key_pub_b64' | base64 -d > /etc/ssh/ssh_host_ed25519_key.pub
+    chmod 0700 /home/${cfg.sshUser}/.ssh
+    chmod 0600 /home/${cfg.sshUser}/.ssh/authorized_keys /etc/ssh/ssh_host_ed25519_key
+    chown -R ${cfg.sshUser}:${cfg.sshUser} /home/${cfg.sshUser}/.ssh
+    passwd -d ${cfg.sshUser} >/dev/null 2>&1 || true
+
+    cat > /etc/nix/nix.conf <<'NIXCONF'
+    trusted-users = root ${cfg.sshUser}
     experimental-features = nix-command flakes
     build-users-group =
     substituters = https://cache.nixos.org/
@@ -108,144 +226,109 @@ let
     trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
     narinfo-cache-positive-ttl = 3600
     narinfo-cache-negative-ttl = 60
-    EOF
+    NIXCONF
 
-    mkdir -p /var/cache/nix/narinfo
+    cat > /etc/sudoers.d/hexbox-builder <<'SUDOERS'
+    ${cfg.sshUser} ALL=(root) NOPASSWD: /nix/var/nix/profiles/default/bin/nix-daemon *
+    SUDOERS
+    chmod 0440 /etc/sudoers.d/hexbox-builder
 
-    mkdir -p /home/builder/.ssh
-    cp /config/builder_ed25519.pub /home/builder/.ssh/authorized_keys
-    chmod 700 /home/builder/.ssh
-    chmod 600 /home/builder/.ssh/authorized_keys
-    chown -R 1000:1000 /home/builder/.ssh
-
-    mkdir -p /home/builder/.cache
-    chown -R 1000:1000 /home/builder
-
-    mkdir -p /etc/ssh
-    cp /config/ssh_host_ed25519_key /etc/ssh/
-    chmod 600 /etc/ssh/ssh_host_ed25519_key
-
-    if ! id sshd > /dev/null 2>&1; then
-      echo "sshd:x:74:74:sshd privsep:/var/empty:/bin/false" >> /etc/passwd
-      echo "sshd:x:74:" >> /etc/group
-    fi
-    mkdir -p /var/empty
-
-    mkdir -p /run/sshd
-    mkdir -p /var/log
-    cat > /etc/ssh/sshd_config << 'EOF'
-    ListenAddress 0.0.0.0:${toString cfg.containerPort}
+    cat > /etc/ssh/sshd_config <<'SSHCONF'
+    Port ${toString cfg.containerPort}
+    ListenAddress 0.0.0.0
     HostKey /etc/ssh/ssh_host_ed25519_key
-    PidFile /run/sshd/sshd.pid
     PermitRootLogin no
     PubkeyAuthentication yes
     PasswordAuthentication no
-    ChallengeResponseAuthentication no
-    UsePAM no
+    KbdInteractiveAuthentication no
+    X11Forwarding no
+    AllowTcpForwarding yes
     PrintMotd no
-    AcceptEnv LANG LC_*
-    SetEnv PATH=/root/.nix-profile/bin:/bin:/sbin:/usr/bin:/usr/local/bin
+    SetEnv PATH=/usr/local/sbin:/usr/local/bin:/nix/var/nix/profiles/default/bin:/usr/sbin:/usr/bin:/sbin:/bin
     Subsystem sftp internal-sftp
     MaxStartups 64:30:128
     MaxSessions 64
+    SSHCONF
+
+    printf '%s\n' '$timeout_seconds' > /etc/hexbox/idle-timeout-seconds
+
+    printf '%s\n' '$idle_enable' > /etc/hexbox/idle-enable
     EOF
-
-    mkdir -p /usr/local/bin
-    cat > /usr/local/bin/hexbox-idle-watchdog << 'EOF'
-    #!/bin/sh
-    set -eu
-    export PATH="/root/.nix-profile/bin:/bin:/sbin:/usr/bin:/usr/local/bin:$PATH"
-
-    timeout_seconds=${toString cfg.idleShutdown.timeoutSeconds}
-    interval_seconds=30
-    idle_seconds=0
-    log_file=/config/hexbox-idle.log
-
-    touch "$log_file"
-    exec >> "$log_file" 2>&1
-    set -x
-    echo "[$(date)] idle watchdog started (timeout=${toString cfg.idleShutdown.timeoutSeconds}s)"
-
-    while ! command -v ps >/dev/null 2>&1; do
-      echo "[$(date)] waiting for procps installation"
-      sleep 5
-    done
-
-    while true; do
-      sleep "$interval_seconds"
-
-      if ps -ef | grep -q 'sshd-sessio[n]'; then
-        ssh_sessions=1
-      else
-        ssh_sessions=0
-      fi
-
-      if [ "$ssh_sessions" -gt 0 ]; then
-        idle_seconds=0
-        echo "[$(date)] active ssh sessions detected (count=$ssh_sessions); resetting idle timer"
-        continue
-      fi
-
-      idle_seconds=$(( idle_seconds + interval_seconds ))
-      echo "[$(date)] no active ssh sessions (count=$ssh_sessions); idle=$idle_seconds s"
-
-      if [ "$idle_seconds" -lt "$timeout_seconds" ]; then
-        continue
-      fi
-
-      echo "[$(date)] idle timeout reached; stopping sshd"
-      sshd_pid=$(cat /run/sshd/sshd.pid 2>/dev/null || true)
-      if [ -n "$sshd_pid" ] && kill -0 "$sshd_pid" 2>/dev/null; then
-        kill -TERM "$sshd_pid"
-      fi
-      exit 0
-    done
-    EOF
-    chmod +x /usr/local/bin/hexbox-idle-watchdog
-
-    ${optionalString cfg.idleShutdown.enable ''
-      if ! command -v ps >/dev/null 2>&1; then
-        sh -c 'until nix --extra-experimental-features "nix-command flakes" profile install --profile /root/.nix-profile nixpkgs#procps; do sleep 10; done' >/config/procps-install.log 2>&1 &
-      fi
-    ''}
-
-    echo "starting nix-daemon"
-    nix-daemon &
-    echo "started nix-daemon pid=$!"
-    ${optionalString cfg.idleShutdown.enable ''
-      echo "starting idle watchdog"
-      /usr/local/bin/hexbox-idle-watchdog &
-      echo "started idle watchdog pid=$!"
-    ''}
-    echo "starting sshd"
-    exec "$(command -v sshd)" -D -e
   '';
 
-  proxyScript = pkgs.writeShellScript "hexbox-proxy" ''
+  startScript = pkgs.writeShellScript "hexbox-start-machine" ''
     set -euo pipefail
 
+    if [ "$(/usr/bin/id -un)" != ${escapeShellArg owner} ]; then
+      exec /usr/bin/sudo -n -u ${escapeShellArg owner} -H "$0"
+    fi
+
     container_bin=${escapeShellArg cfg.containerBinary}
-    container_name=${escapeShellArg effectiveContainerName}
-    timeout_seconds=${escapeShellArg (toString cfg.readiness.timeoutSeconds)}
-    interval_seconds=${escapeShellArg (toString cfg.readiness.intervalSeconds)}
-    deadline=$(( $(/bin/date +%s) + timeout_seconds ))
+    machine_name=${escapeShellArg machineName}
+    image_tag=${escapeShellArg builderImageTag}
+    image_dir=${escapeShellArg "${workDir}/builder-image"}
+    bootstrap_machine=${escapeShellArg machineBootstrapScript}
 
-    "$container_bin" system start >/dev/null 2>&1 || true
-    ${startScript} >/dev/null 2>&1 || true
+    if ! "$container_bin" system status >/dev/null 2>&1; then
+      echo "Apple container system unhealthy; attempting recovery" >&2
+      "$container_bin" system start --enable-kernel-install >/dev/null
+    else
+      "$container_bin" system start >/dev/null 2>&1 || true
+    fi
 
-    while [ "$(( $(/bin/date +%s) ))" -lt "$deadline" ]; do
-      if "$container_bin" exec "$container_name" sh -c ${escapeShellArg ''pid=$(cat /run/sshd/sshd.pid 2>/dev/null || true); [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null''} </dev/null >/dev/null 2>&1; then
-        container_ip=$("$container_bin" inspect "$container_name" 2>/dev/null | /usr/bin/grep -Eo '"ipv4Address":"[0-9.]+' | /usr/bin/sed -n '1s/.*:"//p')
-        if [ -n "$container_ip" ]; then
-          exec /usr/bin/nc "$container_ip" ${toString cfg.containerPort}
-        fi
-      fi
+    if ! "$container_bin" image inspect "$image_tag" >/dev/null 2>&1; then
+      echo "building HexBox machine image $image_tag" >&2
+      "$container_bin" build --pull --progress plain -t "$image_tag" "$image_dir"
+    fi
 
-      /bin/sleep "$interval_seconds"
-    done
+    if ! "$container_bin" machine inspect "$machine_name" >/dev/null 2>&1; then
+      echo "creating HexBox container machine $machine_name" >&2
+      "$container_bin" machine create "$image_tag" \
+        --name "$machine_name" \
+        --cpus ${escapeShellArg (toString cfg.cpus)} \
+        --memory ${escapeShellArg cfg.memory} \
+        --home-mount ${escapeShellArg cfg.homeMount}
+      "$bootstrap_machine"
+      "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
+      "$container_bin" machine run -n "$machine_name" --root -- true >/dev/null
+    else
+      "$container_bin" machine set -n "$machine_name" \
+        cpus=${escapeShellArg (toString cfg.cpus)} \
+        memory=${escapeShellArg cfg.memory} \
+        home-mount=${escapeShellArg cfg.homeMount} >/dev/null
+      "$container_bin" machine run -n "$machine_name" --root -- true >/dev/null
+      "$bootstrap_machine"
+      "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
+      "$container_bin" machine run -n "$machine_name" --root -- true >/dev/null
+    fi
+  '';
 
-    echo "timed out waiting for in-container SSH readiness" >&2
-    exit 1
+  stopScript = pkgs.writeShellScript "hexbox-stop-machine" ''
+    set -euo pipefail
+    if [ "$(/usr/bin/id -un)" != ${escapeShellArg owner} ]; then
+      exec /usr/bin/sudo -n -u ${escapeShellArg owner} -H "$0"
+    fi
+    exec ${escapeShellArg cfg.containerBinary} machine stop ${escapeShellArg machineName}
+  '';
+
+  resetScript = pkgs.writeShellScript "hexbox-reset-machine" ''
+    set -euo pipefail
+    if [ "$(/usr/bin/id -un)" != ${escapeShellArg owner} ]; then
+      exec /usr/bin/sudo -n -u ${escapeShellArg owner} -H "$0"
+    fi
+    ${escapeShellArg cfg.containerBinary} machine rm ${escapeShellArg machineName} >/dev/null 2>&1 || true
+    exec ${escapeShellArg "${workDir}/start-container.sh"}
+  '';
+
+  proxyScript = pkgs.writeShellScript "hexbox-machine-proxy" ''
+    set -euo pipefail
+
+    if [ "$(/usr/bin/id -un)" != ${escapeShellArg owner} ]; then
+      exec /usr/bin/sudo -n -u ${escapeShellArg owner} -H /bin/sh -lc 'exec "$0"' "$0"
+    fi
+
+    ${escapeShellArg "${workDir}/start-container.sh"} >/dev/null 2>&1 || true
+    exec ${escapeShellArg cfg.containerBinary} machine run -i -n ${escapeShellArg machineName} --root -- /usr/bin/nc 127.0.0.1 ${toString cfg.containerPort}
   '';
 
   readinessScript = pkgs.writeShellScript "hexbox-readiness" ''
@@ -257,148 +340,19 @@ let
     interval_seconds=${escapeShellArg (toString cfg.readiness.intervalSeconds)}
     deadline=$(( $(/bin/date +%s) + timeout_seconds ))
 
-    echo "[$(/bin/date)] waiting for SSH readiness on $host_alias"
+    echo "[$(/bin/date)] waiting for SSH readiness on $host_alias" >> ${escapeShellArg readinessLogPath}
 
     while [ "$(( $(/bin/date +%s) ))" -lt "$deadline" ]; do
       if /usr/bin/ssh -F "$ssh_config" -o BatchMode=yes -o ConnectTimeout=2 "$host_alias" true >/dev/null 2>&1; then
-        echo "[$(/bin/date)] SSH is ready on $host_alias"
+        echo "[$(/bin/date)] SSH is ready on $host_alias" >> ${escapeShellArg readinessLogPath}
         exit 0
       fi
 
       /bin/sleep "$interval_seconds"
     done
 
-    echo "[$(/bin/date)] timed out waiting for SSH readiness on $host_alias" >&2
+    echo "[$(/bin/date)] timed out waiting for SSH readiness on $host_alias" >> ${escapeShellArg readinessLogPath}
     exit 1
-  '';
-
-  startScript = pkgs.writeShellScript "hexbox-start" ''
-    set -euo pipefail
-
-    container_bin=${escapeShellArg cfg.containerBinary}
-    reconcile_host_container_internal=${escapeShellArg reconcileHostContainerInternalScript}
-    workdir=${escapeShellArg workDir}
-    container_base=${escapeShellArg cfg.containerName}
-    container_name=${escapeShellArg effectiveContainerName}
-
-    if ! "$container_bin" system status >/dev/null 2>&1; then
-      echo "Apple container system unhealthy; attempting recovery" >&2
-      if ! "$container_bin" system start --enable-kernel-install >/dev/null 2>&1; then
-        echo "Apple container recovery failed" >&2
-        exit 1
-      fi
-    fi
-
-    "$container_bin" system start >/dev/null 2>&1 || true
-
-    if [ "$(/usr/bin/id -u)" -eq 0 ]; then
-      "$reconcile_host_container_internal"
-    fi
-
-    if [ ! -f "$workdir/builder_ed25519" ] || [ ! -f "$workdir/ssh_host_ed25519_key" ]; then
-      echo "container-builder keys missing in $workdir; run $workdir/bootstrap-keys.sh first" >&2
-      exit 1
-    fi
-
-    while IFS= read -r line; do
-      set -- $line
-      existing_name="$1"
-
-      if [ -z "$existing_name" ] || [ "$existing_name" = "ID" ]; then
-        continue
-      fi
-
-      case "$existing_name" in
-        "$container_name")
-          ;;
-        "$container_base")
-          echo "removing stale unversioned container-builder container"
-          "$container_bin" rm -f "$existing_name" >/dev/null 2>&1 || true
-          ;;
-        "$container_base"-*)
-          echo "removing stale container-builder generation $existing_name"
-          "$container_bin" rm -f "$existing_name" >/dev/null 2>&1 || true
-          ;;
-      esac
-    done < <("$container_bin" list --all 2>/dev/null || true)
-
-    container_info="$($container_bin inspect "$container_name" 2>/dev/null || true)"
-
-    if [ -n "$container_info" ]; then
-      if ! printf '%s' "$container_info" | ${pkgs.gnugrep}/bin/grep -Eq ${escapeShellArg ''"${containerGenerationLabel}"[[:space:]]*:[[:space:]]*"${containerVersion}"''}; then
-        echo "existing container-builder container does not match current config generation; recreating"
-        "$container_bin" rm -f "$container_name" >/dev/null 2>&1 || true
-        container_info=""
-      fi
-    fi
-
-    if [ -n "$container_info" ]; then
-      if printf '%s' "$container_info" | ${pkgs.gnugrep}/bin/grep -q '"status"[[:space:]]*:[[:space:]]*"running"'; then
-        echo "container-builder container already running"
-        exit 0
-      fi
-
-      echo "attempting to start existing container-builder container"
-      if "$container_bin" start "$container_name"; then
-        exit 0
-      fi
-
-      echo "existing container-builder container is stale; recreating"
-      "$container_bin" rm -f "$container_name" >/dev/null 2>&1 || true
-    fi
-
-    args=(
-      run
-      -d
-      --init
-      --name "$container_name"
-      --label ${escapeShellArg "${containerGenerationLabel}=${containerVersion}"}
-      --cpus ${escapeShellArg (toString cfg.cpus)}
-      -m ${escapeShellArg cfg.memory}
-      -v ${escapeShellArg "${workDir}:/config"}
-    )
-
-    ${optionalString (cfg.dns.servers != [ ]) ''
-      ${concatMapStringsSep "\n" (server: "args+=( --dns ${escapeShellArg server} )") cfg.dns.servers}
-    ''}
-
-    ${optionalString (cfg.dns.search != [ ]) ''
-      ${concatMapStringsSep "\n" (
-        domain: "args+=( --dns-search ${escapeShellArg domain} )"
-      ) cfg.dns.search}
-    ''}
-
-    ${optionalString (cfg.dns.options != [ ]) ''
-      ${concatMapStringsSep "\n" (
-        option: "args+=( --dns-option ${escapeShellArg option} )"
-      ) cfg.dns.options}
-    ''}
-
-    ${optionalString (cfg.dns.domain != null) ''
-      args+=( --dns-domain ${escapeShellArg cfg.dns.domain} )
-    ''}
-
-    ${optionalString cfg.dns.disable ''
-      args+=( --no-dns )
-    ''}
-
-    ${optionalString (!cfg.bridge.enable) ''
-      args+=( -p ${escapeShellArg "${cfg.listenAddress}:${toString cfg.port}:${toString cfg.containerPort}"} )
-    ''}
-
-    args+=(
-      ${escapeShellArg effectiveImage}
-      sh
-      -c
-      ${escapeShellArg "sh /config/init.sh"}
-    )
-
-    exec "$container_bin" "''${args[@]}"
-  '';
-
-  stopScript = pkgs.writeShellScript "hexbox-stop" ''
-    set -euo pipefail
-    exec ${escapeShellArg cfg.containerBinary} rm -f ${escapeShellArg effectiveContainerName}
   '';
 
   socktainerHealthScript = pkgs.writeShellScript "hexbox-socktainer-health" ''
@@ -414,13 +368,49 @@ let
     exec /usr/bin/curl --silent --show-error --fail --unix-socket "$socket_path" ${escapeShellArg socktainerApiUrl}
   '';
 
+  socktainerLaunchScript = pkgs.writeShellScript "hexbox-socktainer" ''
+    set -euo pipefail
+
+    export HOME=${escapeShellArg cfg.socktainer.homeDirectory}
+    ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg socktainerStateDirectory}
+    exec ${escapeShellArg cfg.socktainer.binary} --no-check-compatibility
+  '';
+
+  userSshConfig = pkgs.writeText "container-builder-ssh-config" ''
+    Host nix-builder
+      HostName ${machineName}
+      User ${cfg.sshUser}
+      IdentityFile ${sshKeyPath}
+      ProxyCommand ${proxyScript}
+      BatchMode yes
+      StrictHostKeyChecking yes
+      UserKnownHostsFile ${knownHostsPath}
+      LogLevel ERROR
+
+    Host ${cfg.hostAlias}
+      HostName ${machineName}
+      User ${cfg.sshUser}
+      IdentityFile ${sshKeyPath}
+      ProxyCommand ${proxyScript}
+      BatchMode yes
+      StrictHostKeyChecking yes
+      UserKnownHostsFile ${knownHostsPath}
+      LogLevel ERROR
+  '';
+
+  rootSshConfig = userSshConfig;
+
+  sshWrapperScript = pkgs.writeShellScript "container-builder-ssh-wrapper" ''
+    exec ssh -F ${escapeShellArg "${workDir}/ssh_config"} "$@"
+  '';
+
   helperScript = pkgs.writeShellScript "hb" ''
     set -euo pipefail
 
     export HB_HOST_ALIAS=${escapeShellArg cfg.hostAlias}
     export HB_SSH_CONFIG=${escapeShellArg "${workDir}/ssh_config_root"}
     export HB_CONTAINER_BIN=${escapeShellArg cfg.containerBinary}
-    export HB_CONTAINER_NAME=${escapeShellArg effectiveContainerName}
+    export HB_CONTAINER_NAME=${escapeShellArg machineName}
     export HB_RECONCILE_HOST_CONTAINER_INTERNAL=${escapeShellArg "${workDir}/reconcile-host-container-internal.sh"}
     export HB_SOCKTAINER_ENABLED=${boolToString cfg.socktainer.enable}
     export HB_SOCKTAINER_AGENT_LABEL=${escapeShellArg socktainerAgentLabel}
@@ -430,12 +420,10 @@ let
     export HB_SOCKTAINER_OUT_LOG=${escapeShellArg "${socktainerStateDirectory}/socktainer.out.log"}
     export HB_READINESS_LOG=${escapeShellArg readinessLogPath}
     export HB_IDLE_LOG=${escapeShellArg idleLogPath}
-    export HB_BRIDGE_AGENT_LABEL=${escapeShellArg bridgeAgentLabel}
-    export HB_BRIDGE_OUT_LOG=${escapeShellArg "${workDir}/hexbox-bridge.out.log"}
-    export HB_BRIDGE_ERR_LOG=${escapeShellArg "${workDir}/hexbox-bridge.err.log"}
-    export HB_REMOTE_STORE=${escapeShellArg "${cfg.protocol}://${cfg.hostAlias}"}
+    export HB_REMOTE_STORE=${escapeShellArg remoteStore}
     export HB_START_SCRIPT=${escapeShellArg startScript}
     export HB_STOP_SCRIPT=${escapeShellArg stopScript}
+    export HB_RESET_SCRIPT=${escapeShellArg resetScript}
     export HB_READINESS_SCRIPT=${escapeShellArg readinessScript}
     export HB_EXPOSE_HOST_CONTAINER_INTERNAL=${boolToString cfg.exposeHostContainerInternal}
 
@@ -458,90 +446,10 @@ let
       runHook postInstall
     '';
   };
-
-  socktainerLaunchScript = pkgs.writeShellScript "hexbox-socktainer" ''
-    set -euo pipefail
-
-    export HOME=${escapeShellArg cfg.socktainer.homeDirectory}
-    ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg socktainerStateDirectory}
-    exec ${escapeShellArg cfg.socktainer.binary} --no-check-compatibility
-  '';
-
-  bridgeLaunchScript = pkgs.writeShellScript "hexbox-bridge" ''
-    exec ${pkgs.socat}/bin/socat \
-      TCP-LISTEN:${toString cfg.port},bind=${cfg.listenAddress},reuseaddr,fork \
-      EXEC:${workDir}/proxy.sh
-  '';
-
-  userSshConfig = pkgs.writeText "container-builder-ssh-config" ''
-    Host nix-builder
-      User ${cfg.sshUser}
-      IdentityFile ${sshKeyPath}
-      ProxyCommand ${proxyScript}
-      StrictHostKeyChecking yes
-      UserKnownHostsFile ${knownHostsPath}
-      LogLevel ERROR
-  '';
-
-  rootSshConfig = pkgs.writeText "container-builder-root-ssh-config" ''
-    Host nix-builder
-      User ${cfg.sshUser}
-      IdentityFile ${sshKeyPath}
-      ProxyCommand ${proxyScript}
-      StrictHostKeyChecking yes
-      UserKnownHostsFile ${knownHostsPath}
-      LogLevel ERROR
-
-    Host ${cfg.hostAlias}
-      HostName ${cfg.listenAddress}
-      Port ${toString cfg.port}
-      User ${cfg.sshUser}
-      IdentityFile ${sshKeyPath}
-      BatchMode yes
-      StrictHostKeyChecking yes
-      UserKnownHostsFile ${knownHostsPath}
-      LogLevel ERROR
-  '';
-
-  sshWrapperScript = pkgs.writeShellScript "container-builder-ssh-wrapper" ''
-    exec ssh -F ${escapeShellArg "${workDir}/ssh_config"} "$@"
-  '';
-
-  containerConfigSpec = pkgs.writeText "container-builder-config.json" (
-    builtins.toJSON {
-      inherit owner;
-      containerName = cfg.containerName;
-      hostAlias = cfg.hostAlias;
-      sshUser = cfg.sshUser;
-      listenAddress = cfg.listenAddress;
-      port = cfg.port;
-      containerPort = cfg.containerPort;
-      workingDirectory = cfg.workingDirectory;
-      image = effectiveImage;
-      imageRepository = cfg.imageRepository;
-      nixVersion = cfg.nixVersion;
-      cpus = cfg.cpus;
-      memory = cfg.memory;
-      dns = cfg.dns;
-      exposeHostContainerInternal = cfg.exposeHostContainerInternal;
-      socktainer = cfg.socktainer;
-      bridgeEnable = cfg.bridge.enable;
-      installerVersion = cfg.installer.version;
-      protocol = cfg.protocol;
-      systems = cfg.systems;
-      supportedFeatures = cfg.supportedFeatures;
-      mandatoryFeatures = cfg.mandatoryFeatures;
-      maxJobs = cfg.maxJobs;
-      speedFactor = cfg.speedFactor;
-      scriptVersion = containerScriptVersion;
-    }
-  );
-  containerVersion = builtins.substring 0 12 (builtins.baseNameOf containerConfigSpec);
-  effectiveContainerName = "${cfg.containerName}-${containerVersion}";
 in
 {
   options.services.container-builder = {
-    enable = mkEnableOption "Apple container-based Linux remote builder";
+    enable = mkEnableOption "Apple container-machine Linux remote builder";
 
     hostAlias = mkOption {
       type = types.str;
@@ -552,38 +460,20 @@ in
     sshUser = mkOption {
       type = types.str;
       default = "builder";
-      description = "User Nix connects to over SSH inside the container.";
-    };
-
-    listenAddress = mkOption {
-      type = types.str;
-      default = "127.0.0.1";
-      description = "Host address for the builder bridge or published SSH port.";
-    };
-
-    port = mkOption {
-      type = types.port;
-      default = 2222;
-      description = "Host port exposed to the nix-daemon for builder SSH.";
-    };
-
-    containerPort = mkOption {
-      type = types.port;
-      default = 22;
-      description = "SSH port listened to inside the container.";
+      description = "User Nix connects to over SSH inside the container machine.";
     };
 
     workingDirectory = mkOption {
       type = types.str;
       default = "/Users/${owner}/.local/state/hb";
-      description = "Directory holding persistent builder state such as keys, generated helper scripts, and logs.";
+      description = "Directory holding persistent builder state such as keys, generated helper scripts, image sources, and logs.";
     };
 
     user = mkOption {
       type = types.str;
       default = config.system.primaryUser;
       defaultText = literalExpression "config.system.primaryUser";
-      description = "Primary macOS user that owns the builder state directory and user launch agents.";
+      description = "Primary macOS user that owns the Apple container runtime and builder state directory.";
     };
 
     containerBinary = mkOption {
@@ -613,61 +503,47 @@ in
     containerName = mkOption {
       type = types.str;
       default = "nix-builder";
-      description = "Name of the Apple container used for Linux builds.";
+      description = "Name of the Apple container machine used for Linux builds.";
     };
 
     imageRepository = mkOption {
       type = types.str;
-      default = runtimeVersions.nixImage.repository;
-      description = "OCI repository used for the Linux builder container image.";
+      default = runtimeVersions.builderImage.repository;
+      description = "OCI repository or local image name used for the Linux builder container machine image.";
     };
 
     nixVersion = mkOption {
       type = types.str;
-      default = runtimeVersions.nixImage.version;
-      description = "Version tag of the upstream `nixos/nix` container image used for the builder.";
+      default = runtimeVersions.builderImage.version;
+      description = "Version tag of the HexBox builder image. For the default local image this also controls when `container build` rebuilds the image.";
     };
 
     cpus = mkOption {
       type = types.ints.positive;
       default = 4;
-      description = "CPU count passed to `container run`.";
+      description = "CPU count assigned to the container machine.";
     };
 
     memory = mkOption {
       type = types.str;
       default = "1G";
-      description = "Memory value passed to `container run -m`.";
+      description = "Memory value assigned to the container machine.";
     };
 
-    dns.servers = mkOption {
-      type = types.listOf types.str;
-      default = [ ];
-      description = "DNS servers passed to `container run --dns` for the builder container. Leave empty to use Apple's default container resolver.";
+    homeMount = mkOption {
+      type = types.enum [
+        "none"
+        "ro"
+        "rw"
+      ];
+      default = "none";
+      description = "Apple container machine home mount mode. The builder defaults to no host home mount.";
     };
 
-    dns.search = mkOption {
-      type = types.listOf types.str;
-      default = [ ];
-      description = "DNS search domains passed to `container run --dns-search`.";
-    };
-
-    dns.options = mkOption {
-      type = types.listOf types.str;
-      default = [ ];
-      description = "Resolver options passed to `container run --dns-option`.";
-    };
-
-    dns.domain = mkOption {
-      type = types.nullOr types.str;
-      default = null;
-      description = "Default DNS domain passed to `container run --dns-domain`.";
-    };
-
-    dns.disable = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Disable container DNS configuration with `container run --no-dns`.";
+    containerPort = mkOption {
+      type = types.port;
+      default = 22;
+      description = "SSH port listened to inside the container machine.";
     };
 
     exposeHostContainerInternal = mkOption {
@@ -690,7 +566,7 @@ in
         "kvm"
         "nixos-test"
       ];
-      description = "Nix builder features advertised for the container builder.";
+      description = "Nix builder features advertised for the container-machine builder.";
     };
 
     mandatoryFeatures = mkOption {
@@ -717,16 +593,10 @@ in
       description = "Remote store protocol used by Nix to talk to the builder.";
     };
 
-    autoStart = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Deprecated no-op retained for compatibility; the builder now starts only on demand.";
-    };
-
     readiness.timeoutSeconds = mkOption {
       type = types.ints.positive;
-      default = 30;
-      description = "How long startup waits for the builder SSH port to become reachable.";
+      default = 60;
+      description = "How long startup waits for the builder SSH service to become reachable.";
     };
 
     readiness.intervalSeconds = mkOption {
@@ -738,19 +608,13 @@ in
     idleShutdown.enable = mkOption {
       type = types.bool;
       default = true;
-      description = "Stop the builder container automatically after a period with no SSH sessions or build activity.";
+      description = "Stop the builder machine automatically after a period with no SSH connections.";
     };
 
     idleShutdown.timeoutSeconds = mkOption {
       type = types.ints.positive;
       default = 300;
-      description = "How long the builder may remain idle before being stopped.";
-    };
-
-    bridge.enable = mkOption {
-      type = types.bool;
-      default = true;
-      description = "Run a user launch agent with socat to bridge host SSH traffic into `container exec`. Disable this to use direct published ports.";
+      description = "How long the builder may remain idle before the guest powers itself off.";
     };
 
     cli.completions.enable = mkOption {
@@ -808,16 +672,11 @@ in
         assertion = pkgs.stdenv.hostPlatform.isDarwin && pkgs.stdenv.hostPlatform.isAarch64;
         message = "`services.container-builder` is currently only supported on aarch64-darwin.";
       }
-      {
-        assertion = cfg.bridge.enable || cfg.listenAddress == "127.0.0.1";
-        message = "`services.container-builder.listenAddress` must be `127.0.0.1` when `services.container-builder.bridge.enable = false;`.";
-      }
     ];
 
     environment.systemPackages = [
       pkgs.netcat
     ]
-    ++ optional cfg.bridge.enable pkgs.socat
     ++ optional cfg.cli.completions.enable completionPackage;
 
     environment.variables = mkIf (cfg.socktainer.enable && cfg.socktainer.setDockerHost) {
@@ -827,82 +686,59 @@ in
     environment.etc."ssh/ssh_config.d/201-container-builder.conf".source = rootSshConfig;
 
     system.activationScripts.extraActivation.text = mkAfter ''
-            if [ ! -x ${escapeShellArg containerExecutable} ] || ! ${escapeShellArg containerExecutable} --version 2>/dev/null | /usr/bin/grep -q ${escapeShellArg cfg.installer.version}; then
-              echo "installing Apple container ${cfg.installer.version} from official pkg..." >&2
-              /usr/sbin/installer -pkg ${escapeShellArg containerInstallerPkg} -target /
-            fi
+      if [ ! -x ${escapeShellArg containerExecutable} ] || ! ${escapeShellArg containerExecutable} --version 2>/dev/null | /usr/bin/grep -q ${escapeShellArg cfg.installer.version}; then
+        echo "installing Apple container ${cfg.installer.version} from official pkg..." >&2
+        /usr/sbin/installer -pkg ${escapeShellArg containerInstallerPkg} -target /
+      fi
 
-            ${optionalString cfg.socktainer.enable ''
-              if [ ! -x ${escapeShellArg cfg.socktainer.binary} ] || ! ${escapeShellArg cfg.socktainer.binary} --version 2>/dev/null | /usr/bin/grep -q ${escapeShellArg cfg.socktainer.installer.version}; then
-                echo "installing Socktainer ${cfg.socktainer.installer.version} from official pkg..." >&2
-                /usr/sbin/installer -pkg ${escapeShellArg socktainerInstallerPkg} -target /
-              fi
-            ''}
+      ${optionalString cfg.socktainer.enable ''
+        if [ ! -x ${escapeShellArg cfg.socktainer.binary} ] || ! ${escapeShellArg cfg.socktainer.binary} --version 2>/dev/null | /usr/bin/grep -q ${escapeShellArg cfg.socktainer.installer.version}; then
+          echo "installing Socktainer ${cfg.socktainer.installer.version} from official pkg..." >&2
+          /usr/sbin/installer -pkg ${escapeShellArg socktainerInstallerPkg} -target /
+        fi
+      ''}
 
-            if ${escapeShellArg cfg.containerBinary} system status >/dev/null 2>&1; then
-              ${reconcileHostContainerInternalScript}
-            else
-              echo "warning: Apple container system is not running; skipping ${hostContainerInternalDomain} DNS reconciliation" >&2
-            fi
+      if ${escapeShellArg cfg.containerBinary} system status >/dev/null 2>&1; then
+        ${reconcileHostContainerInternalScript}
+      else
+        echo "warning: Apple container system is not running; skipping ${hostContainerInternalDomain} DNS reconciliation" >&2
+      fi
 
-            ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg workDir}
-            /usr/sbin/chown ${escapeShellArg owner}:staff ${escapeShellArg workDir}
-            /bin/chmod 0700 ${escapeShellArg workDir}
-            ${pkgs.coreutils}/bin/install -m 0755 ${bootstrapKeysScript} ${escapeShellArg "${workDir}/bootstrap-keys.sh"}
-            ${pkgs.coreutils}/bin/install -m 0755 ${initScript} ${escapeShellArg "${workDir}/init.sh"}
-            ${pkgs.coreutils}/bin/install -m 0755 ${proxyScript} ${escapeShellArg "${workDir}/proxy.sh"}
-            ${pkgs.coreutils}/bin/install -m 0755 ${startScript} ${escapeShellArg "${workDir}/start-container.sh"}
-            ${pkgs.coreutils}/bin/install -m 0755 ${stopScript} ${escapeShellArg "${workDir}/stop-container.sh"}
-            ${pkgs.coreutils}/bin/install -m 0755 ${reconcileHostContainerInternalScript} ${escapeShellArg "${workDir}/reconcile-host-container-internal.sh"}
-            ${pkgs.coreutils}/bin/install -m 0755 ${socktainerLaunchScript} ${escapeShellArg "${workDir}/socktainer.sh"}
-            ${pkgs.coreutils}/bin/install -m 0755 ${sshWrapperScript} ${escapeShellArg "${workDir}/ssh-wrapper.sh"}
-            ${pkgs.coreutils}/bin/install -m 0755 ${bridgeLaunchScript} ${escapeShellArg bridgeLaunchPath}
-            ${pkgs.coreutils}/bin/install -m 0755 ${helperScript} /usr/local/bin/hb
-            ${pkgs.coreutils}/bin/install -m 0644 ${userSshConfig} ${escapeShellArg "${workDir}/ssh_config"}
-            ${pkgs.coreutils}/bin/install -m 0644 ${rootSshConfig} ${escapeShellArg "${workDir}/ssh_config_root"}
-            : > ${escapeShellArg knownHostsPath}
-            /bin/chmod 0644 ${escapeShellArg knownHostsPath}
-            if [ -e ${escapeShellArg "${hostKeyPath}.pub"} ]; then
-              host_key=$(${pkgs.coreutils}/bin/cut -d ' ' -f 1-2 ${escapeShellArg "${hostKeyPath}.pub"})
-              /bin/cat > ${escapeShellArg knownHostsPath} <<EOF
-      ${cfg.hostAlias},nix-builder,[${cfg.listenAddress}]:${toString cfg.port} $host_key
+      ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg workDir} ${escapeShellArg "${workDir}/builder-image"}
+      /usr/sbin/chown ${escapeShellArg owner}:staff ${escapeShellArg workDir} ${escapeShellArg "${workDir}/builder-image"}
+      /bin/chmod 0700 ${escapeShellArg workDir}
+      ${pkgs.coreutils}/bin/install -m 0644 ${builderImageContainerfile} ${escapeShellArg "${workDir}/builder-image/Containerfile"}
+      ${pkgs.coreutils}/bin/install -m 0755 ${bootstrapKeysScript} ${escapeShellArg "${workDir}/bootstrap-keys.sh"}
+      ${pkgs.coreutils}/bin/install -m 0755 ${machineBootstrapScript} ${escapeShellArg "${workDir}/bootstrap-machine.sh"}
+      ${pkgs.coreutils}/bin/install -m 0755 ${proxyScript} ${escapeShellArg "${workDir}/proxy.sh"}
+      ${pkgs.coreutils}/bin/install -m 0755 ${startScript} ${escapeShellArg "${workDir}/start-container.sh"}
+      ${pkgs.coreutils}/bin/install -m 0755 ${stopScript} ${escapeShellArg "${workDir}/stop-container.sh"}
+      ${pkgs.coreutils}/bin/install -m 0755 ${resetScript} ${escapeShellArg "${workDir}/reset-container.sh"}
+      ${pkgs.coreutils}/bin/install -m 0755 ${reconcileHostContainerInternalScript} ${escapeShellArg "${workDir}/reconcile-host-container-internal.sh"}
+      ${pkgs.coreutils}/bin/install -m 0755 ${socktainerLaunchScript} ${escapeShellArg "${workDir}/socktainer.sh"}
+      ${pkgs.coreutils}/bin/install -m 0755 ${sshWrapperScript} ${escapeShellArg "${workDir}/ssh-wrapper.sh"}
+      ${pkgs.coreutils}/bin/install -m 0755 ${helperScript} /usr/local/bin/hb
+      ${pkgs.coreutils}/bin/install -m 0644 ${userSshConfig} ${escapeShellArg "${workDir}/ssh_config"}
+      ${pkgs.coreutils}/bin/install -m 0644 ${rootSshConfig} ${escapeShellArg "${workDir}/ssh_config_root"}
+      : > ${escapeShellArg knownHostsPath}
+      /bin/chmod 0644 ${escapeShellArg knownHostsPath}
+      if [ -e ${escapeShellArg "${hostKeyPath}.pub"} ]; then
+        host_key=$(${pkgs.coreutils}/bin/cut -d ' ' -f 1-2 ${escapeShellArg "${hostKeyPath}.pub"})
+        /bin/cat > ${escapeShellArg knownHostsPath} <<EOF
+      ${cfg.hostAlias},nix-builder,${machineName} $host_key
       EOF
-            fi
-            /usr/sbin/chown ${escapeShellArg owner}:staff \
-              ${escapeShellArg "${workDir}/bootstrap-keys.sh"} \
-              ${escapeShellArg "${workDir}/init.sh"} \
-              ${escapeShellArg "${workDir}/proxy.sh"} \
-              ${escapeShellArg "${workDir}/start-container.sh"} \
-              ${escapeShellArg "${workDir}/stop-container.sh"} \
-              ${escapeShellArg "${workDir}/reconcile-host-container-internal.sh"} \
-              ${escapeShellArg "${workDir}/socktainer.sh"} \
-              ${escapeShellArg "${workDir}/ssh-wrapper.sh"} \
-              ${escapeShellArg bridgeLaunchPath} \
-              ${escapeShellArg knownHostsPath} \
-              ${escapeShellArg "${workDir}/ssh_config"} \
-              ${escapeShellArg "${workDir}/ssh_config_root"}
+      fi
+      /usr/sbin/chown -R ${escapeShellArg owner}:staff ${escapeShellArg workDir}
 
-            ${optionalString cfg.socktainer.enable ''
-              ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg socktainerStateDirectory}
-              /usr/sbin/chown ${escapeShellArg owner}:staff ${escapeShellArg socktainerStateDirectory}
-            ''}
+      ${optionalString cfg.socktainer.enable ''
+        ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg socktainerStateDirectory}
+        /usr/sbin/chown ${escapeShellArg owner}:staff ${escapeShellArg socktainerStateDirectory}
+      ''}
 
-            if [ ! -e ${escapeShellArg sshKeyPath} ] || [ ! -e ${escapeShellArg "${sshKeyPath}.pub"} ] || [ ! -e ${escapeShellArg hostKeyPath} ] || [ ! -e ${escapeShellArg "${hostKeyPath}.pub"} ]; then
-              echo "warning: container-builder keys are missing in ${workDir}; run ${workDir}/bootstrap-keys.sh" >&2
-            fi
+      if [ ! -e ${escapeShellArg sshKeyPath} ] || [ ! -e ${escapeShellArg "${sshKeyPath}.pub"} ] || [ ! -e ${escapeShellArg hostKeyPath} ] || [ ! -e ${escapeShellArg "${hostKeyPath}.pub"} ]; then
+        echo "warning: container-builder keys are missing in ${workDir}; run ${workDir}/bootstrap-keys.sh" >&2
+      fi
     '';
-
-    launchd.user.agents."${bridgeAgentName}" = mkIf cfg.bridge.enable {
-      serviceConfig = {
-        KeepAlive = true;
-        RunAtLoad = true;
-        ProgramArguments = [ bridgeLaunchPath ];
-        StandardErrorPath = "${workDir}/hexbox-bridge.err.log";
-        StandardOutPath = "${workDir}/hexbox-bridge.out.log";
-        WorkingDirectory = workDir;
-      };
-      managedBy = "services.container-builder.bridge.enable";
-    };
 
     launchd.user.agents."${socktainerAgentName}" = mkIf cfg.socktainer.enable {
       serviceConfig = {

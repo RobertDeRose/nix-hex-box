@@ -24,15 +24,13 @@ hb_init() {
   socktainer_err_log=${HB_SOCKTAINER_ERR_LOG:?}
   socktainer_out_log=${HB_SOCKTAINER_OUT_LOG:?}
   readiness_log=${HB_READINESS_LOG:?}
-  bridge_agent_label=${HB_BRIDGE_AGENT_LABEL:?}
-  bridge_out_log=${HB_BRIDGE_OUT_LOG:?}
-  bridge_err_log=${HB_BRIDGE_ERR_LOG:?}
+  idle_log=${HB_IDLE_LOG:?}
   remote_store=${HB_REMOTE_STORE:?}
   start_script=${HB_START_SCRIPT:?}
   stop_script=${HB_STOP_SCRIPT:?}
+  reset_script=${HB_RESET_SCRIPT:?}
   readiness_script=${HB_READINESS_SCRIPT:?}
   expose_host_container_internal=${HB_EXPOSE_HOST_CONTAINER_INTERNAL:?}
-  idle_log=${HB_IDLE_LOG:?}
   hb_env_loaded=1
 }
 
@@ -110,7 +108,7 @@ status_system() {
 }
 
 status_container() {
-  "$container_bin" inspect "$container_name" 2> /dev/null || return 1
+  "$container_bin" machine inspect "$container_name" 2> /dev/null || return 1
 }
 
 status_ssh() {
@@ -147,9 +145,9 @@ probe_common_external_domains() {
   domains=(google.com github.com cache.nixos.org)
   for domain in "${domains[@]}"; do
     if probe_container_tcp_target "$domain" 443; then
-      print_mark ok "Container can reach $domain:443"
+      print_mark ok "Builder machine can reach $domain:443"
     else
-      print_mark fail "Container cannot reach $domain:443"
+      print_mark fail "Builder machine cannot reach $domain:443"
       failed=1
     fi
   done
@@ -169,14 +167,12 @@ builder::status() {
   hb_init
   local system_kind=fail
   local system_text='not running'
-  local container_kind=fail
-  local container_text=missing
-  local ssh_kind=fail
-  local ssh_text=unreachable
-  local remote_kind=fail
-  local remote_text=unreachable
-  local bridge_kind=fail
-  local bridge_text='not loaded'
+  local machine_kind=fail
+  local machine_text=missing
+  local ssh_kind=skip
+  local ssh_text='not checked'
+  local remote_kind=skip
+  local remote_text='not checked'
 
   if status_system > /dev/null; then
     system_kind=ok
@@ -184,13 +180,14 @@ builder::status() {
   fi
 
   if status_container | /usr/bin/grep -q '"status"[[:space:]]*:[[:space:]]*"running"'; then
-    container_kind=ok
-    container_text=running
+    machine_kind=ok
+    machine_text=running
   elif status_container > /dev/null 2>&1; then
-    container_text=stopped
+    machine_kind=pending
+    machine_text=stopped
   fi
 
-  if [ "$container_text" = running ]; then
+  if [ "$machine_text" = running ]; then
     if status_with_retries 3 status_ssh; then
       ssh_kind=ok
       ssh_text=ready
@@ -198,9 +195,7 @@ builder::status() {
       ssh_kind=pending
       ssh_text=starting
     fi
-  fi
 
-  if [ "$container_text" = running ]; then
     if status_with_retries 3 status_remote_store; then
       remote_kind=ok
       remote_text=reachable
@@ -210,15 +205,9 @@ builder::status() {
     fi
   fi
 
-  if launchctl print "gui/$(id -u)/$bridge_agent_label" > /dev/null 2>&1; then
-    bridge_kind=ok
-    bridge_text=loaded
-  fi
-
   print_heading '🔨' 'Builder status'
   print_state_row 'container system' "$system_kind" "$system_text"
-  print_state_row 'bridge agent' "$bridge_kind" "$bridge_text"
-  print_state_row 'builder container' "$container_kind" "$container_text"
+  print_state_row 'builder machine' "$machine_kind" "$machine_text"
   print_state_row 'ssh handshake' "$ssh_kind" "$ssh_text"
   print_state_row 'remote store' "$remote_kind" "$remote_text"
 }
@@ -230,15 +219,19 @@ show_logs() {
   local logfile
 
   case "$target" in
-    idle) logfile="$idle_log" ;;
+    idle)
+      exec /usr/bin/ssh -F "$ssh_config" "$host_alias" "tail -n '$lines' /var/log/hexbox-idle.log"
+      ;;
     readiness) logfile="$readiness_log" ;;
-    bridge) logfile="$bridge_err_log" ;;
-    bridge-out) logfile="$bridge_out_log" ;;
+    bridge | bridge-out)
+      print_error 'Bridge logs were removed with the container-machine backend'
+      exit 2
+      ;;
     boot)
       if [ "$follow" -eq 1 ]; then
-        exec "$container_bin" logs --boot --follow "$container_name"
+        exec "$container_bin" machine logs --boot --follow "$container_name"
       else
-        exec "$container_bin" logs --boot -n "$lines" "$container_name"
+        exec "$container_bin" machine logs --boot "$container_name"
       fi
       ;;
     *)
@@ -261,7 +254,7 @@ show_logs() {
 }
 
 # @cmd Show builder logs
-# @arg target![idle|readiness|bridge|bridge-out|boot] Log target
+# @arg target![idle|readiness|boot] Log target
 # @flag -f --follow Follow log output
 # @option -n --lines <LINES> Number of lines to show
 builder::logs() {
@@ -314,18 +307,12 @@ builder::repair() {
     exit 1
   fi
 
-  if launchctl print "gui/$(id -u)/$bridge_agent_label" > /dev/null 2>&1; then
-    print_mark ok 'Bridge agent loaded'
-  else
-    print_mark fail 'Bridge agent not loaded'
-  fi
-
-  "$start_script" > /dev/null 2>&1 || true
+  "$start_script"
 
   if status_container | /usr/bin/grep -q '"status"[[:space:]]*:[[:space:]]*"running"'; then
-    print_mark ok 'Builder container running'
+    print_mark ok 'Builder machine running'
   else
-    print_mark fail 'Builder container not running'
+    print_mark fail 'Builder machine not running'
     exit 1
   fi
 
@@ -359,14 +346,12 @@ builder::repair() {
     print_mark fail 'Host cannot reach remote store'
     exit 1
   fi
-
 }
 
-# @cmd Destroy and recreate the builder container
+# @cmd Destroy and recreate the builder machine
 builder::reset() {
   hb_init
-  "$stop_script" > /dev/null 2>&1 || true
-  "$start_script"
+  "$reset_script"
   "$readiness_script"
   builder::status
 }
@@ -380,15 +365,12 @@ builder::gc() {
 # @cmd Show raw launchd and container inspection data
 builder::inspect() {
   hb_init
-  print_heading '🔎' 'launchd bridge'
-  launchctl print "gui/$(id -u)/$bridge_agent_label" || true
   if launchctl print "gui/$(id -u)/$socktainer_agent_label" > /dev/null 2>&1; then
-    printf '\n'
     print_heading '🔎' 'launchd socktainer'
     launchctl print "gui/$(id -u)/$socktainer_agent_label" || true
+    printf '\n'
   fi
-  printf '\n'
-  print_heading '🔎' 'container inspect'
+  print_heading '🔎' 'container machine inspect'
   status_container || true
 }
 
@@ -494,14 +476,14 @@ doctor() {
 probe_container_dns_name() {
   local host="$1"
 
-  "$container_bin" run --rm docker.io/alpine:latest sh -eu -c "getent hosts $host >/dev/null" > /dev/null 2>&1
+  "$container_bin" machine run -n "$container_name" --root -- getent hosts "$host" > /dev/null 2>&1
 }
 
 probe_container_tcp_target() {
   local host="$1"
   local port="$2"
 
-  "$container_bin" run --rm docker.io/alpine:latest sh -eu -c "nc -zvw5 $host $port" > /dev/null 2>&1
+  "$container_bin" machine run -n "$container_name" --root -- nc -zvw5 "$host" "$port" > /dev/null 2>&1
 }
 
 # @cmd Check and recover Apple container runtime
@@ -521,11 +503,13 @@ doctor::dns() {
     recover_container_system > /dev/null
   fi
 
+  "$start_script" > /dev/null 2>&1 || true
+
   if probe_common_external_domains; then
     exit 0
   fi
 
-  print_mark fail 'Container external reachability failed; restarting Apple container runtime and retrying'
+  print_mark fail 'Builder external reachability failed; restarting Apple container runtime and retrying'
   if ! recover_container_system > /dev/null; then
     exit 1
   fi
@@ -548,6 +532,8 @@ doctor::host() {
     recover_container_system > /dev/null
   fi
 
+  "$start_script" > /dev/null 2>&1 || true
+
   if probe_container_dns_name host.container.internal; then
     resolved=1
   elif [ "$expose_host_container_internal" = true ]; then
@@ -563,9 +549,9 @@ doctor::host() {
   fi
 
   if [ "$resolved" -eq 1 ]; then
-    print_mark ok 'Container resolves host.container.internal'
+    print_mark ok 'Builder resolves host.container.internal'
   else
-    print_mark fail 'Container cannot resolve host.container.internal'
+    print_mark fail 'Builder cannot resolve host.container.internal'
     exit 1
   fi
 
@@ -586,7 +572,7 @@ doctor::host() {
   fi
 
   if probe_container_tcp_target host.container.internal "$port"; then
-    print_mark ok "Container can reach host.container.internal:$port"
+    print_mark ok "Builder can reach host.container.internal:$port"
     exit 0
   fi
 
@@ -597,9 +583,9 @@ doctor::host() {
   fi
 
   if probe_container_tcp_target host.container.internal "$port"; then
-    print_mark ok "Container can reach host.container.internal:$port"
+    print_mark ok "Builder can reach host.container.internal:$port"
   else
-    print_mark fail "Container cannot reach host.container.internal:$port"
+    print_mark fail "Builder cannot reach host.container.internal:$port"
     exit 1
   fi
 }
@@ -727,7 +713,7 @@ COMMANDS:
   logs     Show builder logs
   test     Run a simple remote build smoke test through the builder
   repair   Verify builder health and recover runtime if needed
-  reset    Destroy and recreate the builder container
+  reset    Destroy and recreate the builder machine
   gc       Run nix garbage collection inside the builder
   inspect  Show raw launchd and container inspection data
   ssh      Open an SSH session to the builder
@@ -886,7 +872,7 @@ Show builder logs
 USAGE: hb builder logs [OPTIONS] <TARGET>
 
 ARGS:
-  <TARGET>  Log target [possible values: idle, readiness, bridge, bridge-out, boot]
+  <TARGET>  Log target [possible values: idle, readiness, boot]
 
 OPTIONS:
   -f, --follow         Follow log output
@@ -953,7 +939,7 @@ _argc_parse_builder_logs() {
     IFS=: read -r values_index values_size <<< "${_argc_match_positionals_values[0]:-}"
     if [[ -n $values_index ]]; then
       argc_target="${argc__positionals[values_index]}"
-      _argc_validate_choices '`<TARGET>`' "$(printf "%s\n" idle readiness bridge bridge-out boot)" "$argc_target"
+      _argc_validate_choices '`<TARGET>`' "$(printf "%s\n" idle readiness boot)" "$argc_target"
     else
       _argc_die 'error: the required environments `<TARGET>` were not provided'
     fi
@@ -1044,7 +1030,7 @@ _argc_parse_builder_repair() {
 
 _argc_usage_builder_reset() {
   cat <<- 'EOF'
-Destroy and recreate the builder container
+Destroy and recreate the builder machine
 
 USAGE: hb builder reset
 EOF

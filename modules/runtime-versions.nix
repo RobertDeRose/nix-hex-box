@@ -11,8 +11,8 @@
     hash = "sha256-VeBxolTFItpdG/IxDr+MjXuMl8zrQFWwOJY46KzVQ+g=";
   };
 
-  nixImage = {
-    repository = "docker.io/nixos/nix";
-    version = "2.34.7";
+  builderImage = {
+    repository = "local/hexbox-builder";
+    version = "alpine-3.22-lix-2.95.2-1";
   };
 }
