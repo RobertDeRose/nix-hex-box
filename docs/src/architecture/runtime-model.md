@@ -9,8 +9,9 @@ Durable host state lives under:
 The current runtime model is:
 
 - the builder is an Apple `container machine`, not an ordinary ephemeral container
-- activation rewrites helper scripts, SSH config, and the local builder-image Containerfile
-- `hb builder repair` builds the local OCI image when it is missing
+- activation rewrites helper scripts and SSH config
+- by default, the machine is created from the published HexBox GHCR image
+- custom `imageContainerfile` configurations build a local OCI image when the tag is missing
 - the SSH path uses `ProxyCommand` to auto-start the machine on demand
 - the same SSH path is usable by the root `nix-daemon`; it sudoes back to the runtime-owning macOS user before invoking Apple `container`
 - the guest SSH user is `builder`

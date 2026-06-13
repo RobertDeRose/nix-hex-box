@@ -25,15 +25,19 @@ Common settings to review first:
 - `idleShutdown.timeoutSeconds`
 - `imageRepository`
 - `nixVersion`
+- `imageContainerfile`
+- `imageBuildContext`
 - `socktainer.enable`
 
-The default image is built locally from the generated Containerfile:
+The default image is pulled from this repository's GitHub Container Registry
+package:
 
 ```text
-local/hexbox-builder:alpine-3.22-lix-2.95.2-1
+ghcr.io/robertderose/nix-hex-box/hexbox-builder:alpine-3.22-lix-2.95.2-1
 ```
 
-The image contains Alpine 3.22, OpenSSH, sudo, and Lix. Runtime
+The image contains Alpine 3.22, OpenSSH, sudo, and Lix. Set
+`imageContainerfile` to build a local custom image instead. Runtime
 bootstrap writes a minimal `nix.conf` that uses `https://cache.nixos.org/` by
 default.
 

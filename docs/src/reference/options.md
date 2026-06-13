@@ -17,6 +17,8 @@ Important options:
 - `containerName`
 - `imageRepository`
 - `nixVersion`
+- `imageContainerfile`
+- `imageBuildContext`
 - `cpus`
 - `memory`
 - `homeMount`
@@ -45,8 +47,11 @@ Machine notes:
 - `containerName` is the Apple container machine name.
 - `imageRepository` and `nixVersion` combine into the image reference used by
   `container machine create`.
-- The defaults build a local image named
-  `local/hexbox-builder:alpine-3.22-lix-2.95.2-1`.
+- The default image is published by this repository as
+  `ghcr.io/robertderose/nix-hex-box/hexbox-builder:alpine-3.22-lix-2.95.2-1`.
+- Set `imageContainerfile` to build a local custom image instead of pulling the
+  default image. `imageBuildContext` supplies an optional build context; without
+  it, HexBox builds with an empty generated context.
 - `homeMount` defaults to `none` so the builder does not mount the host home
   directory.
 - `idleShutdown.timeoutSeconds` controls the guest watchdog that powers the

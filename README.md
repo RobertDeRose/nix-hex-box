@@ -79,15 +79,19 @@ Known open areas:
 
 ## Runtime
 
-The module builds a local builder image by default:
+The module uses the HexBox builder image published by this repository by default:
 
 ```text
-local/hexbox-builder:alpine-3.22-lix-2.95.2-1
+ghcr.io/robertderose/nix-hex-box/hexbox-builder:alpine-3.22-lix-2.95.2-1
 ```
 
-The image contains Alpine 3.22, OpenSSH, sudo, and Lix. The module
-creates a persistent Apple container machine from that image and bootstraps the
+The image contains Alpine 3.22, OpenSSH, sudo, and Lix. The module creates a
+persistent Apple container machine from that image and bootstraps the
 host-specific SSH keys, `nix.conf`, sudoers rule, and idle timeout.
+
+GitHub Actions rebuilds and publishes the default image on the same weekly
+schedule as the runtime-version updater and whenever the image definition
+changes on `main`.
 
 The builder uses `ssh-ng`. The host SSH path is a generated `ProxyCommand` that
 runs Apple `container machine run -i ... nc 127.0.0.1 22`, so the machine starts
@@ -101,6 +105,12 @@ Available image options:
 
 - `services.container-builder.imageRepository`
 - `services.container-builder.nixVersion`
+- `services.container-builder.imageContainerfile`
+- `services.container-builder.imageBuildContext`
+
+Set `imageContainerfile` to build and use a local custom image instead of the
+published GHCR image. Bump `nixVersion` or remove the local image when the
+Containerfile changes.
 
 Available machine options:
 
@@ -167,8 +177,9 @@ hb builder logs idle
 hb doctor
 ```
 
-`hb builder repair` ensures the Apple container system is healthy, builds the
-local OCI image when missing, creates or updates the container machine, verifies
-SSH, checks outbound connectivity, and pings the remote store.
+`hb builder repair` ensures the Apple container system is healthy, builds a
+custom local OCI image when configured and missing, creates or updates the
+container machine, verifies SSH, checks outbound connectivity, and pings the
+remote store.
 
 See `docs/spec.md` for the detailed design notes.

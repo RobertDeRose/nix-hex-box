@@ -6,7 +6,7 @@ Important files include:
 
 - `bootstrap-keys.sh`
 - `bootstrap-machine.sh`
-- `builder-image/Containerfile`
+- `builder-image/Containerfile` when `imageContainerfile` is set
 - `proxy.sh`
 - `start-container.sh`
 - `stop-container.sh`
@@ -21,9 +21,10 @@ Important files include:
 These files are the practical runtime interface to the builder. They are
 generated from the active Nix configuration and should not be edited manually.
 
-The generated Containerfile is the source for the local `local/hexbox-builder`
-OCI image. `hb builder repair` and `start-container.sh` build that image when it
-is missing.
+By default, the builder image is pulled from GHCR. When
+`services.container-builder.imageContainerfile` is set, activation copies that
+Containerfile here and `hb builder repair` / `start-container.sh` build the
+custom image locally when its tag is missing.
 
 The repository copy of `assets/hb.sh` is also generated. Edit `scripts/hb.sh`
 and regenerate `assets/hb.sh` instead of changing the built helper directly.

@@ -30,7 +30,7 @@ than accepted blindly.
 retrying the builder startup path. It also verifies:
 
 - container system health
-- local builder image availability, building it when missing
+- builder image availability, building a configured custom image when missing
 - current builder machine status
 - SSH handshake success
 - outbound builder TCP reachability for common external domains
