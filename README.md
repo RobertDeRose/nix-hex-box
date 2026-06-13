@@ -89,11 +89,10 @@ The image contains Alpine 3.22, OpenSSH, sudo, and Lix. The module creates a
 persistent Apple container machine from that image and bootstraps the
 host-specific SSH keys, `nix.conf`, sudoers rule, and idle timeout.
 
-GitHub Actions rebuilds and publishes the default image on the same weekly
-schedule as the runtime-version updater and whenever the image definition
-changes on `main`.
-
-The workflow also publishes the immutable release tag
+GitHub Actions rebuilds and publishes `latest` on the same weekly schedule as
+the runtime-version updater so Alpine package updates, such as OpenSSH fixes,
+flow into the default image. When the image definition changes on `main`, the
+workflow also publishes the versioned release tag
 `alpine-3.22-lix-2.95.2-1` for users who prefer to pin.
 
 The builder uses `ssh-ng`. The host SSH path is a generated `ProxyCommand` that

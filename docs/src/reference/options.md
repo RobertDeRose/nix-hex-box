@@ -49,7 +49,8 @@ Machine notes:
   `container machine create`.
 - The default image is published by this repository as
   `ghcr.io/robertderose/nix-hex-box/hexbox-builder:latest`.
-- The publish workflow also emits `alpine-3.22-lix-2.95.2-1` for pinned use.
+- Scheduled builds refresh `latest`; image-definition changes also publish
+  `alpine-3.22-lix-2.95.2-1` for pinned use.
 - Set `imageContainerfile` to build a local custom image instead of pulling the
   default image. `imageBuildContext` supplies an optional build context; without
   it, HexBox builds with an empty generated context.

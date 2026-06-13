@@ -36,7 +36,8 @@ package:
 ghcr.io/robertderose/nix-hex-box/hexbox-builder:latest
 ```
 
-The same image is also published with the versioned tag
+Scheduled builds refresh `latest` for Alpine package updates, such as OpenSSH
+fixes. Image-definition changes on `main` also publish the versioned tag
 `alpine-3.22-lix-2.95.2-1` for users who prefer a pinned image.
 
 The image contains Alpine 3.22, OpenSSH, sudo, and Lix. Set

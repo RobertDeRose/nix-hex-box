@@ -19,7 +19,8 @@ The default image is pulled from this repository's GitHub Container Registry
 package as
 `ghcr.io/robertderose/nix-hex-box/hexbox-builder:latest`.
 
-The publish workflow also emits the versioned tag
+Scheduled builds refresh `latest` for Alpine package updates. Image-definition
+changes on `main` also publish the versioned tag
 `alpine-3.22-lix-2.95.2-1`.
 
 Users can set `services.container-builder.imageContainerfile` to build a local

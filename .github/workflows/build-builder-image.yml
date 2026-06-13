@@ -49,6 +49,12 @@ jobs:
             echo "version=$version"
             echo "release_tag=$release_tag"
             echo "lix_version=$lix_version"
+            echo 'tags<<EOF'
+            echo "$repository:$version"
+            if [ "${GITHUB_EVENT_NAME:-}" != schedule ]; then
+              echo "$repository:$release_tag"
+            fi
+            echo EOF
           } >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-qemu-action@v3
@@ -69,10 +75,8 @@ jobs:
           push: true
           build-args: |
             LIX_VERSION=${{ steps.image.outputs.lix_version }}
-          tags: |
-            ${{ steps.image.outputs.repository }}:${{ steps.image.outputs.version }}
-            ${{ steps.image.outputs.repository }}:${{ steps.image.outputs.release_tag }}
+          tags: ${{ steps.image.outputs.tags }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=HexBox Lix remote builder image
-            org.opencontainers.image.version=${{ steps.image.outputs.version }}
+            org.opencontainers.image.version=${{ steps.image.outputs.release_tag }}
