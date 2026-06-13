@@ -12,7 +12,7 @@
   };
 
   builderImage = {
-    repository = "local/hexbox-builder";
+    repository = "ghcr.io/robertderose/nix-hex-box/hexbox-builder";
     version = "alpine-3.22-lix-2.95.2-1";
   };
 }

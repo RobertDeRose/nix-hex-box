@@ -26,6 +26,9 @@ let
   idleLogPath = "${workDir}/hexbox-idle.log";
   machineName = cfg.containerName;
   builderImageTag = "${cfg.imageRepository}:${cfg.nixVersion}";
+  hasCustomImageContainerfile = cfg.imageContainerfile != null;
+  customImageBuildContext =
+    if cfg.imageBuildContext != null then cfg.imageBuildContext else "${workDir}/builder-image/context";
   remoteStore = "${cfg.protocol}://${cfg.hostAlias}";
 
   containerInstallerPkg = pkgs.fetchurl {
@@ -81,110 +84,6 @@ let
     EOF
       /bin/chmod 0644 "$known_hosts_path"
     fi
-  '';
-
-  builderImageContainerfile = pkgs.writeText "hexbox-builder-Containerfile" ''
-    FROM alpine:3.22
-
-    RUN apk add --no-cache \
-          bash \
-          ca-certificates \
-          coreutils \
-          curl \
-          findutils \
-          gcompat \
-          iproute2 \
-          netcat-openbsd \
-          openssh-client \
-          openssh-server \
-          procps \
-          shadow \
-          sudo \
-          tar \
-          xz
-
-    SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-
-    RUN curl -sSf -L https://install.lix.systems/lix | sh -s -- install linux --no-confirm --init none
-
-    RUN mkdir -p /etc/hexbox /etc/machine /run/sshd /usr/local/bin /var/empty && \
-        adduser -D -s /bin/bash builder && \
-        passwd -d builder
-
-    RUN cat > /etc/machine/create-user.sh <<'EOF'
-    #!/bin/sh
-    set -eu
-    group_name=$(getent group "$CONTAINER_GID" | cut -d: -f1 || true)
-    if [ -z "$group_name" ]; then
-      group_name="$CONTAINER_USER"
-      addgroup -g "$CONTAINER_GID" "$group_name"
-    fi
-    if ! id "$CONTAINER_USER" >/dev/null 2>&1; then
-      adduser -D -u "$CONTAINER_UID" -G "$group_name" -h "/home/$CONTAINER_USER" -s /bin/bash "$CONTAINER_USER"
-      passwd -d "$CONTAINER_USER" >/dev/null 2>&1 || true
-    fi
-    EOF
-    RUN chmod 0755 /etc/machine/create-user.sh
-
-    RUN cat > /usr/local/bin/hexbox-nix-daemon <<'EOF'
-    #!/bin/sh
-    set -eu
-    if [ "$(id -u)" -eq 0 ]; then
-      exec /nix/var/nix/profiles/default/bin/nix-daemon "$@"
-    fi
-    exec sudo -n /nix/var/nix/profiles/default/bin/nix-daemon "$@"
-    EOF
-    RUN chmod 0755 /usr/local/bin/hexbox-nix-daemon && \
-        ln -sf /usr/local/bin/hexbox-nix-daemon /usr/local/bin/nix-daemon
-
-    RUN cat > /usr/local/bin/hexbox-idle-watchdog <<'EOF'
-    #!/bin/sh
-    set -eu
-    timeout_seconds=300
-    if [ -f /etc/hexbox/idle-timeout-seconds ]; then
-      timeout_seconds=$(cat /etc/hexbox/idle-timeout-seconds)
-    fi
-    interval_seconds=30
-    idle_seconds=0
-    log_file=/var/log/hexbox-idle.log
-    touch "$log_file"
-    exec >> "$log_file" 2>&1
-    echo "[$(date)] idle watchdog started timeout=$timeout_seconds"
-
-    while true; do
-      sleep "$interval_seconds"
-      if ss -H -tn state established '( sport = :22 )' 2>/dev/null | grep -q .; then
-        idle_seconds=0
-        echo "[$(date)] active ssh connection detected"
-        continue
-      fi
-      idle_seconds=$((idle_seconds + interval_seconds))
-      echo "[$(date)] idle=$idle_seconds"
-      if [ "$idle_seconds" -ge "$timeout_seconds" ]; then
-        echo "[$(date)] idle timeout reached; stopping sshd"
-        sshd_pid=$(cat /run/sshd/sshd.pid 2>/dev/null || true)
-        if [ -n "$sshd_pid" ] && kill -0 "$sshd_pid" 2>/dev/null; then
-          kill -TERM "$sshd_pid"
-        fi
-        exit 0
-      fi
-    done
-    EOF
-    RUN chmod 0755 /usr/local/bin/hexbox-idle-watchdog
-
-    RUN rm -f /sbin/init
-    RUN cat > /sbin/init <<'EOF'
-    #!/bin/sh
-    set -eu
-    mkdir -p /run/sshd /var/empty /var/log
-    ssh-keygen -A >/dev/null 2>&1 || true
-    /nix/var/nix/profiles/default/bin/nix-daemon >/var/log/nix-daemon.log 2>&1 &
-    if [ "$(cat /etc/hexbox/idle-enable 2>/dev/null || echo true)" = true ]; then
-      /usr/local/bin/hexbox-idle-watchdog &
-    fi
-    exec /usr/sbin/sshd -D -e
-    EOF
-    RUN chmod 0755 /sbin/init
   '';
 
   machineBootstrapScript = pkgs.writeShellScript "hexbox-bootstrap-machine" ''
@@ -266,8 +165,12 @@ let
     container_bin=${escapeShellArg cfg.containerBinary}
     machine_name=${escapeShellArg machineName}
     image_tag=${escapeShellArg builderImageTag}
-    image_dir=${escapeShellArg "${workDir}/builder-image"}
     bootstrap_machine=${escapeShellArg machineBootstrapScript}
+
+    ${optionalString hasCustomImageContainerfile ''
+      image_containerfile=${escapeShellArg "${workDir}/builder-image/Containerfile"}
+      image_context=${escapeShellArg customImageBuildContext}
+    ''}
 
     if ! "$container_bin" system status >/dev/null 2>&1; then
       echo "Apple container system unhealthy; attempting recovery" >&2
@@ -276,10 +179,12 @@ let
       "$container_bin" system start >/dev/null 2>&1 || true
     fi
 
-    if ! "$container_bin" image inspect "$image_tag" >/dev/null 2>&1; then
-      echo "building HexBox machine image $image_tag" >&2
-      "$container_bin" build --pull --progress plain -t "$image_tag" "$image_dir"
-    fi
+    ${optionalString hasCustomImageContainerfile ''
+      if ! "$container_bin" image inspect "$image_tag" >/dev/null 2>&1; then
+        echo "building custom HexBox machine image $image_tag" >&2
+        "$container_bin" build --pull --progress plain -f "$image_containerfile" -t "$image_tag" "$image_context"
+      fi
+    ''}
 
     if ! "$container_bin" machine inspect "$machine_name" >/dev/null 2>&1; then
       echo "creating HexBox container machine $machine_name" >&2
@@ -509,13 +414,25 @@ in
     imageRepository = mkOption {
       type = types.str;
       default = runtimeVersions.builderImage.repository;
-      description = "OCI repository or local image name used for the Linux builder container machine image.";
+      description = "OCI repository or image name used for the Linux builder container machine image.";
     };
 
     nixVersion = mkOption {
       type = types.str;
       default = runtimeVersions.builderImage.version;
-      description = "Version tag of the HexBox builder image. For the default local image this also controls when `container build` rebuilds the image.";
+      description = "Version tag of the HexBox builder image. For custom Containerfiles, change this tag or remove the local image to force a rebuild.";
+    };
+
+    imageContainerfile = mkOption {
+      type = types.nullOr types.path;
+      default = null;
+      description = "Optional custom Containerfile to build locally for the builder machine. When null, HexBox uses the published GHCR image.";
+    };
+
+    imageBuildContext = mkOption {
+      type = types.nullOr types.path;
+      default = null;
+      description = "Optional build context for `imageContainerfile`. When null, custom images build with an empty generated context.";
     };
 
     cpus = mkOption {
@@ -704,10 +621,14 @@ in
         echo "warning: Apple container system is not running; skipping ${hostContainerInternalDomain} DNS reconciliation" >&2
       fi
 
-      ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg workDir} ${escapeShellArg "${workDir}/builder-image"}
-      /usr/sbin/chown ${escapeShellArg owner}:staff ${escapeShellArg workDir} ${escapeShellArg "${workDir}/builder-image"}
+      ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg workDir}
+      /usr/sbin/chown ${escapeShellArg owner}:staff ${escapeShellArg workDir}
       /bin/chmod 0700 ${escapeShellArg workDir}
-      ${pkgs.coreutils}/bin/install -m 0644 ${builderImageContainerfile} ${escapeShellArg "${workDir}/builder-image/Containerfile"}
+
+      ${optionalString hasCustomImageContainerfile ''
+        ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg "${workDir}/builder-image/context"}
+        ${pkgs.coreutils}/bin/install -m 0644 ${escapeShellArg cfg.imageContainerfile} ${escapeShellArg "${workDir}/builder-image/Containerfile"}
+      ''}
       ${pkgs.coreutils}/bin/install -m 0755 ${bootstrapKeysScript} ${escapeShellArg "${workDir}/bootstrap-keys.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${machineBootstrapScript} ${escapeShellArg "${workDir}/bootstrap-machine.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${proxyScript} ${escapeShellArg "${workDir}/proxy.sh"}
