@@ -7,8 +7,6 @@ Important options:
 - `enable`
 - `hostAlias`
 - `sshUser`
-- `listenAddress`
-- `port`
 - `containerPort`
 - `workingDirectory`
 - `user`
@@ -21,11 +19,7 @@ Important options:
 - `nixVersion`
 - `cpus`
 - `memory`
-- `dns.servers`
-- `dns.search`
-- `dns.options`
-- `dns.domain`
-- `dns.disable`
+- `homeMount`
 - `exposeHostContainerInternal`
 - `systems`
 - `supportedFeatures`
@@ -33,12 +27,10 @@ Important options:
 - `maxJobs`
 - `speedFactor`
 - `protocol`
-- `autoStart`
 - `readiness.timeoutSeconds`
 - `readiness.intervalSeconds`
 - `idleShutdown.enable`
 - `idleShutdown.timeoutSeconds`
-- `bridge.enable`
 - `cli.completions.enable`
 - `socktainer.enable`
 - `socktainer.binary`
@@ -48,14 +40,24 @@ Important options:
 - `socktainer.installer.hash`
 - `socktainer.installer.version`
 
-DNS notes:
+Machine notes:
 
-- `dns.servers` defaults to `[]`, which keeps Apple's default container
-  resolver.
+- `containerName` is the Apple container machine name.
+- `imageRepository` and `nixVersion` combine into the image reference used by
+  `container machine create`.
+- The defaults build a local image named
+  `local/hexbox-builder:alpine-3.22-lix-2.95.2-1`.
+- `homeMount` defaults to `none` so the builder does not mount the host home
+  directory.
+- `idleShutdown.timeoutSeconds` controls the guest watchdog that powers the
+  machine off after no active SSH connections remain.
+
+Host integration notes:
+
 - `exposeHostContainerInternal` defaults to `true` and ensures
   `host.container.internal` exists through `container system dns`.
-- Prefer leaving `dns.servers` empty unless you have verified custom resolvers
-  work correctly with Apple containers in your environment.
+- The Nix builder path uses `ssh-ng` through generated SSH config and
+  `ProxyCommand`; no stable machine IP or published host port is required.
 
 Completion notes:
 

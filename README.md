@@ -4,8 +4,8 @@
   <img src="assets/logo.png" alt="HexBox logo" width="240" />
 </p>
 
-`nix-hex-box` is a `nix-darwin` module that configures an Apple Container based
-`aarch64-linux` remote builder for Nix.
+`nix-hex-box` is a `nix-darwin` module that configures an Apple
+`container machine` backed `aarch64-linux` remote builder for Nix.
 
 Documentation site:
 
@@ -14,19 +14,20 @@ Documentation site:
 Current design highlights:
 
 - installs Apple `container` from the official signed GitHub release package
+- builds a local Alpine/Lix based OCI image for the builder machine
+- creates a persistent Apple `container machine` instead of an ephemeral container
 - configures `nix.buildMachines` for `ssh-ng://container-builder`
-- pulls a pinned upstream `nixos/nix` builder image
-- manages durable builder state under `~/.local/state/hb`
-- installs a launch agent for the optional host-side SSH bridge
+- uses `ProxyCommand` to auto-start the machine and relay SSH to guest `sshd`
+- lets the macOS root `nix-daemon` sudo back to the runtime-owning user for the Apple container command
+- connects as the guest `builder` user and uses a narrow passwordless sudo wrapper for the remote `nix-daemon`
+- keeps the guest `/nix` store persistent across machine stops and starts
+- powers the guest off after a configurable idle timeout with no active SSH connections
+- manages durable host state under `~/.local/state/hb`
 - can install and manage Socktainer as an optional Docker-compatible API layer
 - installs host-side SSH aliases for both `nix-builder` and `container-builder`
-- uses direct `ProxyCommand` via `~/.local/state/hb/proxy.sh` for helper access, while the localhost bridge remains the compatible path for the root `nix-daemon`
-- writes a generated `known_hosts` file under `~/.local/state/hb` so both SSH paths verify the builder host key
-- configures container DNS explicitly for cache resolution
+- writes a generated `known_hosts` file under `~/.local/state/hb` so SSH verifies the builder host key
 - exposes `host.container.internal` for Apple containers by default via `container system dns`
 - waits for a real SSH handshake before considering the builder ready
-- wakes the builder on demand and relays SSH directly to the current container IP
-- supports guest-side idle shutdown with in-container logging under `~/.local/state/hb/hexbox-idle.log`
 
 ## Module
 
@@ -54,6 +55,7 @@ lint workflow passes.
           services.container-builder = {
             enable = true;
             cpus = 4;
+            memory = "8G";
             maxJobs = 4;
             socktainer.enable = true;
             # Optional override if you do not want to use config.system.primaryUser.
@@ -70,35 +72,46 @@ lint workflow passes.
 
 This module is functional but still in progress.
 
-Known open area:
+Known open areas:
 
-- broader validation of when bridge-free operation is safe for daemon-driven builds
+- evaluating a smaller systemd-based image once Apple `container machine` handles
+  larger systemd images reliably
 
-## DNS
+## Runtime
 
-The module exposes container DNS settings directly and defaults to public
-recursive resolvers so the builder can resolve `cache.nixos.org`.
+The module builds a local builder image by default:
 
-The builder keeps the container generation-aware. The image's built-in `/nix`
-is used directly; build outputs live in the container's writable layer and are
-re-fetched from substituters if the container is recreated.
+```text
+local/hexbox-builder:alpine-3.22-lix-2.95.2-1
+```
 
-By default the module uses the upstream builder image:
+The image contains Alpine 3.22, OpenSSH, sudo, and Lix. The module
+creates a persistent Apple container machine from that image and bootstraps the
+host-specific SSH keys, `nix.conf`, sudoers rule, and idle timeout.
 
-`docker.io/nixos/nix:2.34.6`
+The builder uses `ssh-ng`. The host SSH path is a generated `ProxyCommand` that
+runs Apple `container machine run -i ... nc 127.0.0.1 22`, so the machine starts
+on demand and IP changes do not affect the Nix builder config.
 
-Available image version options:
+The guest `/nix` store lives in the machine's persistent storage. Stop/start
+keeps build outputs and downloaded substitutes. `hb builder reset` deletes and
+recreates the machine, which also deletes the guest-local store.
+
+Available image options:
 
 - `services.container-builder.imageRepository`
 - `services.container-builder.nixVersion`
 
-Available options:
+Available machine options:
 
-- `services.container-builder.dns.servers`
-- `services.container-builder.dns.search`
-- `services.container-builder.dns.options`
-- `services.container-builder.dns.domain`
-- `services.container-builder.dns.disable`
+- `services.container-builder.cpus`
+- `services.container-builder.memory`
+- `services.container-builder.homeMount`
+- `services.container-builder.idleShutdown.enable`
+- `services.container-builder.idleShutdown.timeoutSeconds`
+
+Available host/container integration options:
+
 - `services.container-builder.exposeHostContainerInternal`
 - `services.container-builder.socktainer.enable`
 - `services.container-builder.socktainer.homeDirectory`
@@ -107,7 +120,7 @@ Available options:
 - `services.container-builder.socktainer.installer.hash`
 - `services.container-builder.socktainer.installer.version`
 
-The builder container also writes a minimal `nix.conf` with
+The builder machine writes a minimal `nix.conf` with
 `https://cache.nixos.org/` configured as a substituter.
 
 Example:
@@ -117,19 +130,6 @@ services.container-builder = {
   enable = true;
 };
 ```
-
-Leave `services.container-builder.dns.servers` empty to keep Apple's default
-container resolver. Set it only if you have verified that your chosen DNS
-servers work correctly with Apple containers in your environment.
-
-By default the module also ensures Apple's documented host alias is available:
-
-```text
-host.container.internal
-```
-
-This is managed with `container system dns create host.container.internal --localhost 203.0.113.113`.
-Set `services.container-builder.exposeHostContainerInternal = false;` to opt out.
 
 ## Socktainer
 
@@ -150,128 +150,25 @@ export DOCKER_HOST=unix://$HOME/.socktainer/container.sock
 docker ps
 ```
 
-The helper also exposes:
+Set `services.container-builder.socktainer.setDockerHost = true;` if you want
+the module to export that socket as `DOCKER_HOST` in the user environment.
 
-- `hb socktainer` defaults to `hb socktainer status`
-- `hb socktainer status`
-- `hb socktainer logs`
-- `hb socktainer logs -f`
+## Helper
 
-To install shell completions for `hb`, set:
-
-```nix
-services.container-builder.cli.completions.enable = true;
-```
-
-This is opt-in. When enabled, the module installs bash, zsh, and fish
-completion files into the standard Nix-managed shell completion directories.
-It does not guess the user's shell or modify shell startup files.
-
-To export `DOCKER_HOST` automatically for user sessions, set:
-
-```nix
-services.container-builder.socktainer = {
-  enable = true;
-  setDockerHost = true;
-};
-```
-
-## Idempotency
-
-The module tries to be idempotent at the builder-configuration layer.
-
-What it handles:
-
-- the Apple `container` pkg is only installed when missing or on version change
-- the durable state directory and helper scripts are reinstalled safely on each activation
-- the builder container name is derived from a derivation-backed configuration spec
-- when relevant builder settings change, the derived generation changes too
-- stale older `nix-builder-*` generations are removed automatically
-- the builder container is reused across restarts when possible; cached build outputs survive as long as the container exists
-- the active container is stamped with its expected generation label and recreated if it drifts
-- the builder container runs with Apple `container --init`
-
-What it cannot fully handle:
-
-- Apple `container` itself is still an external mutable runtime
-- launchd/XPC/vmnet state can become unhealthy independently of the Nix module
-- first-run Apple runtime bootstrap may still require operational recovery
-- the module can reconcile builder containers and launch-agent wiring, but it cannot guarantee the Apple runtime substrate is always healthy
-
-## Builder Image
-
-The module now uses the upstream `nixos/nix` image directly. When idle
-shutdown is enabled, `procps` is installed lazily in the background on first
-boot so the watchdog can use `ps` without blocking container startup.
-
-## Verification And Recovery
-
-After activation, the main helper entrypoint is:
+After activation, use:
 
 ```bash
-hb builder
-```
-
-For full verification and recovery-aware checks, use:
-
-```bash
+hb builder status
 hb builder repair
-```
-
-The helper supports:
-
-- `hb builder`
-- `hb builder repair`
-- `hb builder logs [readiness|bridge|bridge-out|boot|idle]`
-- `hb builder reset`
-- `hb builder gc`
-- `hb builder ssh`
-- `hb builder inspect`
-- `hb doctor`
-- `hb doctor runtime`
-- `hb doctor dns`
-- `hb doctor host [port]`
-
-The helper's user-side SSH path uses `ProxyCommand ${HOME}/.local/state/hb/proxy.sh`
-to wake the builder and relay directly to the current container IP. The root
-daemon path can still use the localhost bridge, which remains the supported path
-for remote builds on the current host setup.
-
-To run runtime and connectivity diagnostics, use:
-
-```bash
+hb builder test
+hb builder ssh
+hb builder logs boot
+hb builder logs idle
 hb doctor
-hb doctor runtime
-hb doctor dns
-hb doctor host
-hb doctor host 8000
 ```
 
-`hb doctor runtime` checks the Apple container runtime and attempts recovery for
-known failure boundaries. `hb doctor dns` checks connectivity to well-known
-domains such as `google.com`, `github.com`, and `cache.nixos.org` over `443`.
-`hb doctor host` verifies that a throwaway container resolves
-`host.container.internal`, and if you pass a port it also checks
-`host.container.internal:<port>`. For the host port probe, it tries the check
-first without elevation, then re-applies Apple's localhost forwarding with
-`sudo` only if the first probe fails.
-
-When idle shutdown is enabled, the watchdog runs inside the container and logs
-its decisions to `~/.local/state/hb/hexbox-idle.log`. It resets its timer
-whenever active SSH sessions exist and terminates `sshd` after the configured
-idle timeout.
-
-The helper checks:
-
-- `container system status`
-- current builder container inspect output
-- SSH connectivity to `nix-builder`
-- Nix cache reachability inside the builder
-- `ssh-ng://container-builder` reachability from the host daemon side
-
-If the Apple container system is hung, the on-demand start path and
-`hb doctor runtime` attempt recovery by running
-`container system start --enable-kernel-install`. `hb builder repair` reuses
-that same recovery path before retrying the builder container.
+`hb builder repair` ensures the Apple container system is healthy, builds the
+local OCI image when missing, creates or updates the container machine, verifies
+SSH, checks outbound connectivity, and pings the remote store.
 
 See `docs/spec.md` for the detailed design notes.
