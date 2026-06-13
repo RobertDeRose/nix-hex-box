@@ -16,7 +16,7 @@ let
   hostContainerInternalLoopback = "203.0.113.113";
   socktainerAgentName = "hexbox-socktainer";
   socktainerAgentLabel = "org.nixos.${socktainerAgentName}";
-  machineProxyAgentName = "hexbox-machine-proxy";
+  machineProxyAgentName = "com.github.robertderose.hexbox-proxy";
   machineProxySocketPath = "${workDir}/machine-proxy.sock";
   machineProxyLogPath = "${workDir}/machine-proxy.err.log";
   socktainerStateDirectory = "${cfg.socktainer.homeDirectory}/.socktainer";
@@ -686,6 +686,7 @@ in
 
     launchd.user.agents."${machineProxyAgentName}" = {
       serviceConfig = {
+        Label = machineProxyAgentName;
         ProgramArguments = [ "${workDir}/proxy-server.sh" ];
         Sockets = {
           Listeners = {
