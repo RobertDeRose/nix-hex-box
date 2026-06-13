@@ -16,9 +16,6 @@ let
   hostContainerInternalLoopback = "203.0.113.113";
   socktainerAgentName = "hexbox-socktainer";
   socktainerAgentLabel = "org.nixos.${socktainerAgentName}";
-  machineProxyAgentName = "com.github.robertderose.hexbox-proxy";
-  machineProxySocketPath = "${workDir}/machine-proxy.sock";
-  machineProxyLogPath = "${workDir}/machine-proxy.err.log";
   socktainerStateDirectory = "${cfg.socktainer.homeDirectory}/.socktainer";
   socktainerSocketPath = "${socktainerStateDirectory}/container.sock";
   socktainerApiUrl = "http://localhost/_ping";
@@ -240,17 +237,31 @@ let
     exec ${escapeShellArg "${workDir}/start-container.sh"}
   '';
 
-  proxyServerScript = pkgs.writeShellScript "hexbox-machine-proxy-server" ''
-    set -euo pipefail
-
-    ${escapeShellArg "${workDir}/start-container.sh"} >/dev/null 2>&1 || true
-    exec ${escapeShellArg cfg.containerBinary} machine run -i -n ${escapeShellArg machineName} --root -- /usr/bin/nc -w 60 127.0.0.1 ${toString cfg.containerPort}
-  '';
-
   proxyScript = pkgs.writeShellScript "hexbox-machine-proxy" ''
     set -euo pipefail
 
-    exec ${pkgs.socat}/bin/socat - UNIX-CONNECT:${escapeShellArg machineProxySocketPath} 2>>${escapeShellArg machineProxyLogPath}
+    owner=${escapeShellArg owner}
+    start_container=${escapeShellArg "${workDir}/start-container.sh"}
+    container_bin=${escapeShellArg cfg.containerBinary}
+    machine_name=${escapeShellArg machineName}
+    container_port=${escapeShellArg (toString cfg.containerPort)}
+
+    run_proxy() {
+      "$start_container" >/dev/null 2>&1 || true
+      exec "$container_bin" machine run -i -n "$machine_name" --root -- /usr/bin/nc -w 60 127.0.0.1 "$container_port"
+    }
+
+    if [ "$(/usr/bin/id -un)" = "$owner" ]; then
+      run_proxy
+    fi
+
+    if [ "$(/usr/bin/id -u)" = 0 ]; then
+      owner_uid=$(/usr/bin/id -u "$owner")
+      exec /bin/launchctl asuser "$owner_uid" /usr/bin/sudo -n -u "$owner" -H "$0"
+    fi
+
+    echo "hexbox: proxy must run as $owner or root" >&2
+    exit 1
   '';
 
   readinessScript = pkgs.writeShellScript "hexbox-readiness" ''
@@ -629,6 +640,10 @@ in
       fi
 
       /bin/rm -f /etc/ssh/ssh_config.d/201-container-builder-socat.conf
+      stale_proxy_agent=${escapeShellArg "/Users/${owner}/Library/LaunchAgents/com.github.robertderose.hexbox-proxy.plist"}
+      /bin/launchctl bootout "gui/$(/usr/bin/id -u ${escapeShellArg owner})" "$stale_proxy_agent" >/dev/null 2>&1 || true
+      /bin/rm -f "$stale_proxy_agent"
+      /bin/rm -f ${escapeShellArg "/Users/${owner}/Library/LaunchAgents/org.nixos.hexbox-machine-proxy.plist"}
 
       ${optionalString cfg.socktainer.enable ''
         if [ ! -x ${escapeShellArg cfg.socktainer.binary} ] || ! ${escapeShellArg cfg.socktainer.binary} --version 2>/dev/null | /usr/bin/grep -q ${escapeShellArg cfg.socktainer.installer.version}; then
@@ -654,7 +669,6 @@ in
       ${pkgs.coreutils}/bin/install -m 0755 ${bootstrapKeysScript} ${escapeShellArg "${workDir}/bootstrap-keys.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${machineBootstrapScript} ${escapeShellArg "${workDir}/bootstrap-machine.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${proxyScript} ${escapeShellArg "${workDir}/proxy.sh"}
-      ${pkgs.coreutils}/bin/install -m 0755 ${proxyServerScript} ${escapeShellArg "${workDir}/proxy-server.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${startScript} ${escapeShellArg "${workDir}/start-container.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${stopScript} ${escapeShellArg "${workDir}/stop-container.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${resetScript} ${escapeShellArg "${workDir}/reset-container.sh"}
@@ -683,25 +697,6 @@ in
         echo "warning: container-builder keys are missing in ${workDir}; run ${workDir}/bootstrap-keys.sh" >&2
       fi
     '';
-
-    launchd.user.agents."${machineProxyAgentName}" = {
-      serviceConfig = {
-        Label = machineProxyAgentName;
-        ProgramArguments = [ "${workDir}/proxy-server.sh" ];
-        Sockets = {
-          Listeners = {
-            SockPathName = machineProxySocketPath;
-            SockPathMode = 384;
-          };
-        };
-        inetdCompatibility = {
-          Wait = false;
-        };
-        StandardErrorPath = machineProxyLogPath;
-        WorkingDirectory = workDir;
-      };
-      managedBy = "services.container-builder.enable";
-    };
 
     launchd.user.agents."${socktainerAgentName}" = mkIf cfg.socktainer.enable {
       serviceConfig = {
