@@ -20,9 +20,10 @@ RUN apk add --no-cache \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN curl -sSf -L https://install.lix.systems/lix \
-  | NIX_INSTALLER_BINARY_ROOT="https://install.lix.systems/lix/${LIX_VERSION}" \
-    sh -s -- install linux --no-confirm --init none
+RUN curl -sSf -L -o /tmp/lix-installer https://install.lix.systems/lix && \
+    NIX_INSTALLER_BINARY_ROOT="https://install.lix.systems/lix/${LIX_VERSION}" \
+      sh /tmp/lix-installer install linux --no-confirm --init none && \
+    rm -f /tmp/lix-installer
 
 RUN mkdir -p /etc/hexbox /etc/machine /run/sshd /usr/local/bin /var/empty && \
     adduser -D -s /bin/bash builder && \

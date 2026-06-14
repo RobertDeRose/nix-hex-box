@@ -151,7 +151,7 @@ let
     "$container_bin" machine run -i -n "$machine_name" --root /bin/bash -s <<EOF
     set -euo pipefail
 
-    mkdir -p /etc/hexbox /etc/nix /etc/ssh /home/${cfg.sshUser}/.ssh /nix/var/hexbox /run/sshd /var/log
+    mkdir -p /etc/hexbox /etc/nix /etc/ssh /etc/sudoers.d /home/${cfg.sshUser}/.ssh /nix/var/hexbox /run/sshd /usr/local/bin /var/log
     printf '%s' '$auth_key_b64' | base64 -d > /nix/var/hexbox/authorized_keys
     printf '%s' '$host_key_b64' | base64 -d > /nix/var/hexbox/ssh_host_ed25519_key
     printf '%s' '$host_key_pub_b64' | base64 -d > /nix/var/hexbox/ssh_host_ed25519_key.pub
@@ -747,6 +747,8 @@ in
       ${pkgs.coreutils}/bin/install -m 0644 ${rootSshConfig} ${escapeShellArg "${workDir}/ssh_config_root"}
       : > ${escapeShellArg knownHostsPath}
       /bin/chmod 0644 ${escapeShellArg knownHostsPath}
+      : > ${escapeShellArg readinessLogPath}
+      /bin/chmod 0644 ${escapeShellArg readinessLogPath}
       if [ -e ${escapeShellArg "${hostKeyPath}.pub"} ]; then
         host_key=$(${pkgs.coreutils}/bin/cut -d ' ' -f 1-2 ${escapeShellArg "${hostKeyPath}.pub"})
         /bin/cat > ${escapeShellArg knownHostsPath} <<EOF

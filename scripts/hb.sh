@@ -235,7 +235,7 @@ show_logs() {
       if [ "$follow" -eq 1 ]; then
         exec "$container_bin" machine logs --boot --follow "$container_name"
       else
-        exec "$container_bin" machine logs --boot "$container_name"
+        "$container_bin" machine logs --boot "$container_name" | /usr/bin/tail -n "$lines"
       fi
       ;;
     *)
@@ -263,7 +263,16 @@ show_logs() {
 # @option -n --lines <LINES> Number of lines to show
 builder::logs() {
   hb_init
-  show_logs "$argc_target" "${argc_follow:-0}" "${argc_lines:-100}"
+  local lines="${argc_lines:-100}"
+
+  case "$lines" in
+    *[!0-9]* | '')
+      print_error "Lines must be numeric: $lines"
+      exit 2
+      ;;
+  esac
+
+  show_logs "$argc_target" "${argc_follow:-0}" "$lines"
 }
 
 # @cmd Run a simple remote build smoke test through the builder
