@@ -521,7 +521,7 @@ doctor::dns() {
   "$start_script" > /dev/null
 
   if probe_common_external_domains; then
-    exit 0
+    return 0
   fi
 
   print_mark fail 'Builder external reachability failed; restarting Apple container runtime and retrying'

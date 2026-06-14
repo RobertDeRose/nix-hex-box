@@ -161,6 +161,11 @@ let
       ssh_shell=/bin/sh
     fi
 
+    if ! command -v base64 >/dev/null 2>&1; then
+      echo "base64 is required inside the builder image for HexBox bootstrap" >&2
+      exit 1
+    fi
+
     mkdir -p /etc/hexbox /etc/nix /etc/ssh /etc/sudoers.d /nix/var/hexbox /run/sshd /usr/local/bin /var/log
     if ! getent group "$ssh_user" >/dev/null 2>&1; then
       if command -v addgroup >/dev/null 2>&1; then
@@ -352,7 +357,10 @@ let
     container_port=${escapeShellArg (toString cfg.containerPort)}
 
     run_proxy() {
-      "$start_container" >/dev/null 2>&1 || true
+      if ! "$start_container" >/dev/null 2>&1; then
+        echo "hexbox: failed to start builder machine; run 'hb builder repair' and inspect readiness logs" >&2
+        exit 1
+      fi
       exec "$container_bin" machine run -i -n "$machine_name" --root nc -w 60 127.0.0.1 "$container_port"
     }
 
