@@ -23,7 +23,6 @@ let
   hostKeyPath = "${workDir}/ssh_host_ed25519_key";
   knownHostsPath = "${workDir}/known_hosts";
   readinessLogPath = "${workDir}/hexbox-readiness.log";
-  idleLogPath = "${workDir}/hexbox-idle.log";
   machineName = cfg.containerName;
   builderImageTag = "${cfg.imageRepository}:${cfg.nixVersion}";
   bootstrapVersion = builtins.hashString "sha256" (
