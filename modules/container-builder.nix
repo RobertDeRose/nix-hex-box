@@ -142,7 +142,7 @@ let
     timeout_seconds=${escapeShellArg (toString cfg.idleShutdown.timeoutSeconds)}
     idle_enable=${boolToString cfg.idleShutdown.enable}
 
-    if [ ! -f "$workdir/builder_ed25519.pub" ] || [ ! -f "$workdir/ssh_host_ed25519_key" ]; then
+    if [ ! -f "$workdir/builder_ed25519.pub" ] || [ ! -f "$workdir/ssh_host_ed25519_key" ] || [ ! -f "$workdir/ssh_host_ed25519_key.pub" ]; then
       echo "container-builder keys missing in $workdir; run $workdir/bootstrap-keys.sh first" >&2
       exit 1
     fi
