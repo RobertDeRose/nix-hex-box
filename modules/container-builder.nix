@@ -151,18 +151,50 @@ let
     "$container_bin" machine run -i -n "$machine_name" --root /bin/bash -s <<EOF
     set -euo pipefail
 
-    mkdir -p /etc/hexbox /etc/nix /etc/ssh /etc/sudoers.d /home/${cfg.sshUser}/.ssh /nix/var/hexbox /run/sshd /usr/local/bin /var/log
+    ssh_user=${escapeShellArg cfg.sshUser}
+    ssh_shell=/bin/bash
+    if [ ! -x "$ssh_shell" ]; then
+      ssh_shell=/bin/sh
+    fi
+
+    mkdir -p /etc/hexbox /etc/nix /etc/ssh /etc/sudoers.d /nix/var/hexbox /run/sshd /usr/local/bin /var/log
+    if ! getent group "$ssh_user" >/dev/null 2>&1; then
+      if command -v addgroup >/dev/null 2>&1; then
+        addgroup "$ssh_user"
+      elif command -v groupadd >/dev/null 2>&1; then
+        groupadd "$ssh_user"
+      else
+        echo "cannot create missing group: $ssh_user" >&2
+        exit 1
+      fi
+    fi
+    if ! id -u "$ssh_user" >/dev/null 2>&1; then
+      if command -v adduser >/dev/null 2>&1; then
+        adduser -D -G "$ssh_user" -s "$ssh_shell" "$ssh_user"
+      elif command -v useradd >/dev/null 2>&1; then
+        useradd -m -g "$ssh_user" -s "$ssh_shell" "$ssh_user"
+      else
+        echo "cannot create missing user: $ssh_user" >&2
+        exit 1
+      fi
+    fi
+
+    ssh_home=$(getent passwd "$ssh_user" | cut -d: -f6)
+    if [ -z "$ssh_home" ]; then
+      ssh_home="/home/$ssh_user"
+    fi
+    mkdir -p "$ssh_home/.ssh"
     printf '%s' '$auth_key_b64' | base64 -d > /nix/var/hexbox/authorized_keys
     printf '%s' '$host_key_b64' | base64 -d > /nix/var/hexbox/ssh_host_ed25519_key
     printf '%s' '$host_key_pub_b64' | base64 -d > /nix/var/hexbox/ssh_host_ed25519_key.pub
-    cp /nix/var/hexbox/authorized_keys /home/${cfg.sshUser}/.ssh/authorized_keys
+    cp /nix/var/hexbox/authorized_keys "$ssh_home/.ssh/authorized_keys"
     cp /nix/var/hexbox/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key
     cp /nix/var/hexbox/ssh_host_ed25519_key.pub /etc/ssh/ssh_host_ed25519_key.pub
-    chmod 0700 /home/${cfg.sshUser}/.ssh
-    chmod 0600 /home/${cfg.sshUser}/.ssh/authorized_keys /etc/ssh/ssh_host_ed25519_key /nix/var/hexbox/ssh_host_ed25519_key
+    chmod 0700 "$ssh_home/.ssh"
+    chmod 0600 "$ssh_home/.ssh/authorized_keys" /etc/ssh/ssh_host_ed25519_key /nix/var/hexbox/ssh_host_ed25519_key
     chmod 0644 /nix/var/hexbox/authorized_keys /nix/var/hexbox/ssh_host_ed25519_key.pub
-    chown -R ${cfg.sshUser}:${cfg.sshUser} /home/${cfg.sshUser}/.ssh
-    passwd -d ${cfg.sshUser} >/dev/null 2>&1 || true
+    chown -R "$ssh_user:$ssh_user" "$ssh_home/.ssh"
+    passwd -d "$ssh_user" >/dev/null 2>&1 || true
 
     cat > /nix/var/hexbox/nix.conf <<'NIXCONF'
     trusted-users = root ${cfg.sshUser}
