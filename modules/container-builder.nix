@@ -343,7 +343,15 @@ let
     if [ "$(/usr/bin/id -un)" != ${escapeShellArg owner} ]; then
       exec /usr/bin/sudo -n -u ${escapeShellArg owner} -H "$0"
     fi
-    ${escapeShellArg cfg.containerBinary} machine rm ${escapeShellArg machineName} >/dev/null 2>&1 || true
+    container_bin=${escapeShellArg cfg.containerBinary}
+    machine_name=${escapeShellArg machineName}
+    "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
+    if ! rm_output=$("$container_bin" machine rm "$machine_name" 2>&1); then
+      if [[ "$rm_output" != *"not found"* && "$rm_output" != *"No such"* && "$rm_output" != *"does not exist"* ]]; then
+        printf '%s\n' "$rm_output" >&2
+        exit 1
+      fi
+    fi
     exec ${escapeShellArg "${workDir}/start-container.sh"}
   '';
 
@@ -357,7 +365,7 @@ let
     container_port=${escapeShellArg (toString cfg.containerPort)}
 
     run_proxy() {
-      if ! "$start_container" >/dev/null 2>&1; then
+      if ! "$start_container" >/dev/null; then
         echo "hexbox: failed to start builder machine; run 'hb builder repair' and inspect readiness logs" >&2
         exit 1
       fi
