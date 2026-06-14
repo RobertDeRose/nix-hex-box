@@ -346,7 +346,7 @@ let
 
     run_proxy() {
       "$start_container" >/dev/null 2>&1 || true
-      exec "$container_bin" machine run -i -n "$machine_name" --root /usr/bin/nc -w 60 127.0.0.1 "$container_port"
+      exec "$container_bin" machine run -i -n "$machine_name" --root nc -w 60 127.0.0.1 "$container_port"
     }
 
     if [ "$(/usr/bin/id -un)" = "$owner" ]; then
