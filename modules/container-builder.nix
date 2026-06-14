@@ -109,6 +109,11 @@ let
     exec >> "$log_file" 2>&1
     echo "[$(date)] idle watchdog started timeout=$timeout_seconds"
 
+    if ! command -v ss >/dev/null 2>&1; then
+      echo "[$(date)] ss not found; idle watchdog disabled"
+      exit 0
+    fi
+
     while true; do
       sleep "$interval_seconds"
       if ss -H -tn state established "( sport = :$ssh_port )" 2>/dev/null | grep -q .; then
@@ -242,7 +247,9 @@ let
     cp /nix/var/hexbox/idle-enable /etc/hexbox/idle-enable
     cp /nix/var/hexbox/bootstrap-version /etc/hexbox/bootstrap-version
 
-    kill -HUP 1 2>/dev/null || true
+    if [ "$(ps -p 1 -o comm= 2>/dev/null || true)" = sshd ]; then
+      kill -HUP 1 2>/dev/null || true
+    fi
     EOF
   '';
 

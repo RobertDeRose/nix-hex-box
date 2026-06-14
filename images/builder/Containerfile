@@ -32,7 +32,7 @@ RUN mkdir -p /etc/hexbox /etc/machine /run/sshd /usr/local/bin /var/empty && \
 RUN cat > /etc/machine/create-user.sh <<'EOF'
 #!/bin/sh
 set -eu
-group_name=$(getent group "$CONTAINER_GID" | cut -d: -f1 || true)
+group_name=$(getent group | awk -F: -v gid="$CONTAINER_GID" '$3 == gid { print $1; exit }')
 if [ -z "$group_name" ]; then
   group_name="$CONTAINER_USER"
   addgroup -g "$CONTAINER_GID" "$group_name"
