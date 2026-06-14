@@ -26,7 +26,16 @@ let
   idleLogPath = "${workDir}/hexbox-idle.log";
   machineName = cfg.containerName;
   builderImageTag = "${cfg.imageRepository}:${cfg.nixVersion}";
-  bootstrapVersion = "2026-06-13-idle-watchdog-pid1";
+  bootstrapVersion = builtins.hashString "sha256" (
+    builtins.toJSON {
+      recipeVersion = "2026-06-14-machine-bootstrap-v2";
+      sshUser = cfg.sshUser;
+      containerPort = cfg.containerPort;
+      idleShutdownEnable = cfg.idleShutdown.enable;
+      idleShutdownTimeoutSeconds = cfg.idleShutdown.timeoutSeconds;
+      hostAlias = cfg.hostAlias;
+    }
+  );
   hasCustomImageContainerfile = cfg.imageContainerfile != null;
   customImageBuildContext =
     if cfg.imageBuildContext != null then cfg.imageBuildContext else "${workDir}/builder-image/context";
@@ -89,6 +98,7 @@ let
 
   idleWatchdogScript = pkgs.writeShellScript "hexbox-idle-watchdog" ''
     set -eu
+    ssh_port=${escapeShellArg (toString cfg.containerPort)}
     timeout_seconds=300
     if [ -f /etc/hexbox/idle-timeout-seconds ]; then
       timeout_seconds=$(cat /etc/hexbox/idle-timeout-seconds)
@@ -102,7 +112,7 @@ let
 
     while true; do
       sleep "$interval_seconds"
-      if ss -H -tn state established '( sport = :22 )' 2>/dev/null | grep -q .; then
+      if ss -H -tn state established "( sport = :$ssh_port )" 2>/dev/null | grep -q .; then
         idle_seconds=0
         echo "[$(date)] active ssh connection detected"
         continue

@@ -2,7 +2,7 @@
 
 `nix-hex-box` currently follows these design choices:
 
-- published Alpine/Lix based builder image in this repository's GHCR package
+- published Alpine/Lix-based builder image in this repository's GHCR package
 - optional local custom image builds from `imageContainerfile`
 - persistent Apple `container machine` instead of generation-aware ordinary containers
 - on-demand startup through SSH `ProxyCommand`
