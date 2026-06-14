@@ -518,7 +518,7 @@ doctor::dns() {
     recover_container_system > /dev/null
   fi
 
-  "$start_script" > /dev/null 2>&1 || true
+  "$start_script" > /dev/null
 
   if probe_common_external_domains; then
     exit 0
@@ -547,7 +547,7 @@ doctor::host() {
     recover_container_system > /dev/null
   fi
 
-  "$start_script" > /dev/null 2>&1 || true
+  "$start_script" > /dev/null
 
   if probe_container_dns_name host.container.internal; then
     resolved=1
