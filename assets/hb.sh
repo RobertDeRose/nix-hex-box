@@ -24,7 +24,6 @@ hb_init() {
   socktainer_err_log=${HB_SOCKTAINER_ERR_LOG:?}
   socktainer_out_log=${HB_SOCKTAINER_OUT_LOG:?}
   readiness_log=${HB_READINESS_LOG:?}
-  idle_log=${HB_IDLE_LOG:?}
   remote_store=${HB_REMOTE_STORE:?}
   start_script=${HB_START_SCRIPT:?}
   stop_script=${HB_STOP_SCRIPT:?}
