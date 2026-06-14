@@ -89,7 +89,7 @@ jobs:
           if not created_raw:
               raise SystemExit(f"Lix tag {lix_version!r} does not include a commit creation date")
 
-          created = datetime.fromisoformat(created_raw).astimezone(timezone.utc)
+          created = datetime.fromisoformat(created_raw.replace("Z", "+00:00")).astimezone(timezone.utc)
           now = datetime.now(timezone.utc)
           age_seconds = int((now - created).total_seconds())
           eligible = age_seconds >= cooldown_seconds
