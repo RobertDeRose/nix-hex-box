@@ -14,7 +14,7 @@ Documentation site:
 Current design highlights:
 
 - installs Apple `container` from the official signed GitHub release package
-- builds a local Alpine/Lix based OCI image for the builder machine
+- pulls the published Alpine/Lix-based builder image by default, with an optional local custom image build
 - creates a persistent Apple `container machine` instead of an ephemeral container
 - configures `nix.buildMachines` for `ssh-ng://container-builder`
 - uses `ProxyCommand` to auto-start the machine and relay SSH to guest `sshd`

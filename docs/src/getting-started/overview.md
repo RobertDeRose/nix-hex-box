@@ -10,7 +10,7 @@ The main option namespace is `services.container-builder`.
 When enabled, the module:
 
 - installs the Apple Container runtime package when needed
-- builds a local Alpine/Lix based OCI image for the builder machine
+- pulls the published Alpine/Lix-based builder image by default, with an optional local custom image build
 - creates a persistent Apple `container machine` for Linux builds
 - can optionally install Socktainer to expose a Docker-compatible local socket
 - writes helper scripts and SSH configuration under `~/.local/state/hb`
