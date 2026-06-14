@@ -236,6 +236,7 @@ show_logs() {
         exec "$container_bin" machine logs --boot --follow "$container_name"
       else
         "$container_bin" machine logs --boot "$container_name" | /usr/bin/tail -n "$lines"
+        return
       fi
       ;;
     *)
