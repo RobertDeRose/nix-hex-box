@@ -419,7 +419,7 @@ let
       HostName ${machineName}
       User ${cfg.sshUser}
       IdentityFile ${sshKeyPath}
-      ProxyCommand ${proxyScript}
+      ProxyCommand ${escapeShellArg "${workDir}/proxy.sh"}
       BatchMode yes
       StrictHostKeyChecking yes
       UserKnownHostsFile ${knownHostsPath}
@@ -431,7 +431,7 @@ let
       HostName ${machineName}
       User ${cfg.sshUser}
       IdentityFile ${sshKeyPath}
-      ProxyCommand ${proxyScript}
+      ProxyCommand ${escapeShellArg "${workDir}/proxy.sh"}
       BatchMode yes
       StrictHostKeyChecking yes
       UserKnownHostsFile ${knownHostsPath}
