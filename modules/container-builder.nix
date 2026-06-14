@@ -166,6 +166,11 @@ let
       exit 1
     fi
 
+    if ! command -v getent >/dev/null 2>&1; then
+      echo "getent is required inside the builder image for HexBox bootstrap" >&2
+      exit 1
+    fi
+
     mkdir -p /etc/hexbox /etc/nix /etc/ssh /etc/sudoers.d /nix/var/hexbox /run/sshd /usr/local/bin /var/log
     if ! getent group "$ssh_user" >/dev/null 2>&1; then
       if command -v addgroup >/dev/null 2>&1; then
