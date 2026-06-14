@@ -59,17 +59,74 @@ jobs:
             echo EOF
           } >> "$GITHUB_OUTPUT"
 
+      - name: Check Lix release age
+        id: lix-release
+        env:
+          LIX_VERSION: ${{ steps.image.outputs.lix_version }}
+          LIX_RELEASE_COOLDOWN_DAYS: "7"
+        run: |
+          set -euo pipefail
+
+          tags_json=$(mktemp)
+          curl -fsSLo "$tags_json" https://git.lix.systems/api/v1/repos/lix-project/lix/tags
+
+          python3 - "$tags_json" "$LIX_VERSION" "$LIX_RELEASE_COOLDOWN_DAYS" "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY" <<'PY'
+          from datetime import datetime, timezone
+          import json
+          import sys
+
+          tags_path, lix_version, cooldown_days, output_path, summary_path = sys.argv[1:]
+          cooldown_seconds = int(cooldown_days) * 24 * 60 * 60
+
+          with open(tags_path, encoding="utf-8") as tags_file:
+              tags = json.load(tags_file)
+
+          tag = next((item for item in tags if item.get("name") == lix_version), None)
+          if tag is None:
+              raise SystemExit(f"Lix tag {lix_version!r} was not found")
+
+          created_raw = tag.get("commit", {}).get("created")
+          if not created_raw:
+              raise SystemExit(f"Lix tag {lix_version!r} does not include a commit creation date")
+
+          created = datetime.fromisoformat(created_raw).astimezone(timezone.utc)
+          now = datetime.now(timezone.utc)
+          age_seconds = int((now - created).total_seconds())
+          eligible = age_seconds >= cooldown_seconds
+          age_days = age_seconds // (24 * 60 * 60)
+
+          with open(output_path, "a", encoding="utf-8") as output_file:
+              print(f"created={created.isoformat()}", file=output_file)
+              print(f"age_days={age_days}", file=output_file)
+              print(f"eligible={str(eligible).lower()}", file=output_file)
+
+          with open(summary_path, "a", encoding="utf-8") as summary_file:
+              print(f"Lix {lix_version} tag date: {created.isoformat()}", file=summary_file)
+              if eligible:
+                  print(f"Lix {lix_version} is at least {cooldown_days} days old; publishing builder image.", file=summary_file)
+              else:
+                  print(f"Lix {lix_version} is {age_days} days old; skipping builder image publish until it is at least {cooldown_days} days old.", file=summary_file)
+          PY
+
+      - name: Skip builder image publish
+        if: steps.lix-release.outputs.eligible != 'true'
+        run: echo "Skipping builder image publish because Lix ${{ steps.image.outputs.lix_version }} is inside the 7 day release cooldown."
+
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
+        if: steps.lix-release.outputs.eligible == 'true'
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+        if: steps.lix-release.outputs.eligible == 'true'
 
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        if: steps.lix-release.outputs.eligible == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        if: steps.lix-release.outputs.eligible == 'true'
         with:
           context: images/builder
           file: images/builder/Containerfile

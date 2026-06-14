@@ -91,8 +91,9 @@ host-specific SSH keys, `nix.conf`, sudoers rule, and idle timeout.
 
 GitHub Actions rebuilds and publishes `latest` on the same weekly schedule as
 the runtime-version updater so Alpine package updates, such as OpenSSH fixes,
-flow into the default image. When the image definition changes on `main`, the
-workflow also publishes the versioned release tag
+flow into the default image. Builder image publishing is skipped until the
+configured Lix tag is at least seven days old. When the image definition changes
+on `main`, the workflow also publishes the versioned release tag
 `alpine-3.22-lix-2.95.2-1` for users who prefer to pin.
 
 The builder uses `ssh-ng`. The host SSH path is a generated `ProxyCommand` that

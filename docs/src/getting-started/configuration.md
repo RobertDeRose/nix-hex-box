@@ -37,8 +37,9 @@ ghcr.io/robertderose/nix-hex-box/hexbox-builder:latest
 ```
 
 Scheduled builds refresh `latest` for Alpine package updates, such as OpenSSH
-fixes. Image-definition changes on `main` also publish the versioned tag
-`alpine-3.22-lix-2.95.2-1` for users who prefer a pinned image.
+fixes. Builder image publishing is skipped until the configured Lix tag is at
+least seven days old. Image-definition changes on `main` also publish the
+versioned tag `alpine-3.22-lix-2.95.2-1` for users who prefer a pinned image.
 
 The image contains Alpine 3.22, OpenSSH, sudo, and Lix. Set
 `imageContainerfile` to build a local custom image instead. Runtime

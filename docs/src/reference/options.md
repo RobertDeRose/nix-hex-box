@@ -50,7 +50,8 @@ Machine notes:
 - The default image is published by this repository as
   `ghcr.io/robertderose/nix-hex-box/hexbox-builder:latest`.
 - Scheduled builds refresh `latest`; image-definition changes also publish
-  `alpine-3.22-lix-2.95.2-1` for pinned use.
+  `alpine-3.22-lix-2.95.2-1` for pinned use. Builder image publishing is
+  skipped until the configured Lix tag is at least seven days old.
 - Set `imageContainerfile` to build a local custom image instead of pulling the
   default image. `imageBuildContext` supplies an optional build context; without
   it, HexBox builds with an empty generated context.
