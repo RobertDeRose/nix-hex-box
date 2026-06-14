@@ -58,7 +58,9 @@ RUN cat > /usr/local/bin/hexbox-idle-watchdog <<'EOF'
 #!/bin/sh
 set -eu
 timeout_seconds=300
-if [ -f /etc/hexbox/idle-timeout-seconds ]; then
+if [ -f /nix/var/hexbox/idle-timeout-seconds ]; then
+  timeout_seconds=$(cat /nix/var/hexbox/idle-timeout-seconds)
+elif [ -f /etc/hexbox/idle-timeout-seconds ]; then
   timeout_seconds=$(cat /etc/hexbox/idle-timeout-seconds)
 fi
 interval_seconds=30
@@ -78,11 +80,10 @@ while true; do
   idle_seconds=$((idle_seconds + interval_seconds))
   echo "[$(date)] idle=$idle_seconds"
   if [ "$idle_seconds" -ge "$timeout_seconds" ]; then
-    echo "[$(date)] idle timeout reached; stopping sshd"
-    sshd_pid=$(cat /run/sshd/sshd.pid 2>/dev/null || true)
-    if [ -n "$sshd_pid" ] && kill -0 "$sshd_pid" 2>/dev/null; then
-      kill -TERM "$sshd_pid"
-    fi
+    echo "[$(date)] idle timeout reached; stopping machine"
+    kill -TERM 1
+    sleep 5
+    kill -KILL 1 2>/dev/null || true
     exit 0
   fi
 done
@@ -97,7 +98,11 @@ mkdir -p /run/sshd /var/empty /var/log
 ssh-keygen -A >/dev/null 2>&1 || true
 /nix/var/nix/profiles/default/bin/nix-daemon >/var/log/nix-daemon.log 2>&1 &
 if [ "$(cat /etc/hexbox/idle-enable 2>/dev/null || echo true)" = true ]; then
-  /usr/local/bin/hexbox-idle-watchdog &
+  watchdog=/usr/local/bin/hexbox-idle-watchdog
+  if [ -x /nix/var/hexbox/hexbox-idle-watchdog ]; then
+    watchdog=/nix/var/hexbox/hexbox-idle-watchdog
+  fi
+  "$watchdog" &
 fi
 exec /usr/sbin/sshd -D -e
 EOF

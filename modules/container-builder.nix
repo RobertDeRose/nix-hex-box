@@ -26,6 +26,7 @@ let
   idleLogPath = "${workDir}/hexbox-idle.log";
   machineName = cfg.containerName;
   builderImageTag = "${cfg.imageRepository}:${cfg.nixVersion}";
+  bootstrapVersion = "2026-06-13-idle-watchdog-pid1";
   hasCustomImageContainerfile = cfg.imageContainerfile != null;
   customImageBuildContext =
     if cfg.imageBuildContext != null then cfg.imageBuildContext else "${workDir}/builder-image/context";
@@ -86,6 +87,38 @@ let
     fi
   '';
 
+  idleWatchdogScript = pkgs.writeShellScript "hexbox-idle-watchdog" ''
+    set -eu
+    timeout_seconds=300
+    if [ -f /etc/hexbox/idle-timeout-seconds ]; then
+      timeout_seconds=$(cat /etc/hexbox/idle-timeout-seconds)
+    fi
+    interval_seconds=30
+    idle_seconds=0
+    log_file=/var/log/hexbox-idle.log
+    touch "$log_file"
+    exec >> "$log_file" 2>&1
+    echo "[$(date)] idle watchdog started timeout=$timeout_seconds"
+
+    while true; do
+      sleep "$interval_seconds"
+      if ss -H -tn state established '( sport = :22 )' 2>/dev/null | grep -q .; then
+        idle_seconds=0
+        echo "[$(date)] active ssh connection detected"
+        continue
+      fi
+      idle_seconds=$((idle_seconds + interval_seconds))
+      echo "[$(date)] idle=$idle_seconds"
+      if [ "$idle_seconds" -ge "$timeout_seconds" ]; then
+        echo "[$(date)] idle timeout reached; stopping machine"
+        kill -TERM 1
+        sleep 5
+        kill -KILL 1 2>/dev/null || true
+        exit 0
+      fi
+    done
+  '';
+
   machineBootstrapScript = pkgs.writeShellScript "hexbox-bootstrap-machine" ''
     set -euo pipefail
 
@@ -103,20 +136,25 @@ let
     auth_key_b64=$(/usr/bin/base64 < "$workdir/builder_ed25519.pub" | /usr/bin/tr -d '\n')
     host_key_b64=$(/usr/bin/base64 < "$workdir/ssh_host_ed25519_key" | /usr/bin/tr -d '\n')
     host_key_pub_b64=$(/usr/bin/base64 < "$workdir/ssh_host_ed25519_key.pub" | /usr/bin/tr -d '\n')
+    watchdog_b64=$(/usr/bin/base64 < ${escapeShellArg idleWatchdogScript} | /usr/bin/tr -d '\n')
 
-    "$container_bin" machine run -i -n "$machine_name" --root -- /bin/bash -s <<EOF
+    "$container_bin" machine run -i -n "$machine_name" --root /bin/bash -s <<EOF
     set -euo pipefail
 
-    mkdir -p /etc/hexbox /etc/nix /etc/ssh /home/${cfg.sshUser}/.ssh /run/sshd /var/log
-    printf '%s' '$auth_key_b64' | base64 -d > /home/${cfg.sshUser}/.ssh/authorized_keys
-    printf '%s' '$host_key_b64' | base64 -d > /etc/ssh/ssh_host_ed25519_key
-    printf '%s' '$host_key_pub_b64' | base64 -d > /etc/ssh/ssh_host_ed25519_key.pub
+    mkdir -p /etc/hexbox /etc/nix /etc/ssh /home/${cfg.sshUser}/.ssh /nix/var/hexbox /run/sshd /var/log
+    printf '%s' '$auth_key_b64' | base64 -d > /nix/var/hexbox/authorized_keys
+    printf '%s' '$host_key_b64' | base64 -d > /nix/var/hexbox/ssh_host_ed25519_key
+    printf '%s' '$host_key_pub_b64' | base64 -d > /nix/var/hexbox/ssh_host_ed25519_key.pub
+    cp /nix/var/hexbox/authorized_keys /home/${cfg.sshUser}/.ssh/authorized_keys
+    cp /nix/var/hexbox/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key
+    cp /nix/var/hexbox/ssh_host_ed25519_key.pub /etc/ssh/ssh_host_ed25519_key.pub
     chmod 0700 /home/${cfg.sshUser}/.ssh
-    chmod 0600 /home/${cfg.sshUser}/.ssh/authorized_keys /etc/ssh/ssh_host_ed25519_key
+    chmod 0600 /home/${cfg.sshUser}/.ssh/authorized_keys /etc/ssh/ssh_host_ed25519_key /nix/var/hexbox/ssh_host_ed25519_key
+    chmod 0644 /nix/var/hexbox/authorized_keys /nix/var/hexbox/ssh_host_ed25519_key.pub
     chown -R ${cfg.sshUser}:${cfg.sshUser} /home/${cfg.sshUser}/.ssh
     passwd -d ${cfg.sshUser} >/dev/null 2>&1 || true
 
-    cat > /etc/nix/nix.conf <<'NIXCONF'
+    cat > /nix/var/hexbox/nix.conf <<'NIXCONF'
     trusted-users = root ${cfg.sshUser}
     experimental-features = nix-command flakes
     build-users-group =
@@ -126,13 +164,15 @@ let
     narinfo-cache-positive-ttl = 3600
     narinfo-cache-negative-ttl = 60
     NIXCONF
+    cp /nix/var/hexbox/nix.conf /etc/nix/nix.conf
 
-    cat > /etc/sudoers.d/hexbox-builder <<'SUDOERS'
+    cat > /nix/var/hexbox/hexbox-builder.sudoers <<'SUDOERS'
     ${cfg.sshUser} ALL=(root) NOPASSWD: /nix/var/nix/profiles/default/bin/nix-daemon *
     SUDOERS
-    chmod 0440 /etc/sudoers.d/hexbox-builder
+    cp /nix/var/hexbox/hexbox-builder.sudoers /etc/sudoers.d/hexbox-builder
+    chmod 0440 /etc/sudoers.d/hexbox-builder /nix/var/hexbox/hexbox-builder.sudoers
 
-    cat > /etc/ssh/sshd_config <<'SSHCONF'
+    cat > /nix/var/hexbox/sshd_config <<'SSHCONF'
     Port ${toString cfg.containerPort}
     ListenAddress 0.0.0.0
     HostKey /etc/ssh/ssh_host_ed25519_key
@@ -148,10 +188,20 @@ let
     MaxStartups 64:30:128
     MaxSessions 64
     SSHCONF
+    cp /nix/var/hexbox/sshd_config /etc/ssh/sshd_config
 
-    printf '%s\n' '$timeout_seconds' > /etc/hexbox/idle-timeout-seconds
+    printf '%s' '$watchdog_b64' | base64 -d > /nix/var/hexbox/hexbox-idle-watchdog
+    cp /nix/var/hexbox/hexbox-idle-watchdog /usr/local/bin/hexbox-idle-watchdog
+    chmod 0755 /nix/var/hexbox/hexbox-idle-watchdog /usr/local/bin/hexbox-idle-watchdog
 
-    printf '%s\n' '$idle_enable' > /etc/hexbox/idle-enable
+    printf '%s\n' '$timeout_seconds' > /nix/var/hexbox/idle-timeout-seconds
+    printf '%s\n' '$idle_enable' > /nix/var/hexbox/idle-enable
+    printf '%s\n' ${escapeShellArg bootstrapVersion} > /nix/var/hexbox/bootstrap-version
+    cp /nix/var/hexbox/idle-timeout-seconds /etc/hexbox/idle-timeout-seconds
+    cp /nix/var/hexbox/idle-enable /etc/hexbox/idle-enable
+    cp /nix/var/hexbox/bootstrap-version /etc/hexbox/bootstrap-version
+
+    kill -HUP 1 2>/dev/null || true
     EOF
   '';
 
@@ -181,7 +231,7 @@ let
     machine_name=${escapeShellArg machineName}
     image_tag=${escapeShellArg builderImageTag}
     bootstrap_machine=${escapeShellArg machineBootstrapScript}
-
+    bootstrap_version=${escapeShellArg bootstrapVersion}
     ${optionalString hasCustomImageContainerfile ''
       image_containerfile=${escapeShellArg "${workDir}/builder-image/Containerfile"}
       image_context=${escapeShellArg customImageBuildContext}
@@ -208,15 +258,22 @@ let
         --cpus ${escapeShellArg (toString cfg.cpus)} \
         --memory ${escapeShellArg cfg.memory} \
         --home-mount ${escapeShellArg cfg.homeMount}
+      "$container_bin" machine run -i -n "$machine_name" --root true </dev/null >/dev/null
       "$bootstrap_machine"
       "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
-      "$container_bin" machine run -i -n "$machine_name" --root -- true </dev/null >/dev/null
+      "$container_bin" machine run -i -n "$machine_name" --root true </dev/null >/dev/null
     else
       "$container_bin" machine set -n "$machine_name" \
         cpus=${escapeShellArg (toString cfg.cpus)} \
         memory=${escapeShellArg cfg.memory} \
         home-mount=${escapeShellArg cfg.homeMount} >/dev/null
-      "$container_bin" machine run -i -n "$machine_name" --root -- true </dev/null >/dev/null
+      "$container_bin" machine run -i -n "$machine_name" --root true </dev/null >/dev/null
+      current_bootstrap_version=$("$container_bin" machine run -i -n "$machine_name" --root /bin/cat /nix/var/hexbox/bootstrap-version </dev/null 2>/dev/null || true)
+      if [ "$current_bootstrap_version" != "$bootstrap_version" ]; then
+        "$bootstrap_machine"
+        "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
+        "$container_bin" machine run -i -n "$machine_name" --root true </dev/null >/dev/null
+      fi
     fi
   '';
 
@@ -248,7 +305,7 @@ let
 
     run_proxy() {
       "$start_container" >/dev/null 2>&1 || true
-      exec "$container_bin" machine run -i -n "$machine_name" --root -- /usr/bin/nc -w 60 127.0.0.1 "$container_port"
+      exec "$container_bin" machine run -i -n "$machine_name" --root /usr/bin/nc -w 60 127.0.0.1 "$container_port"
     }
 
     if [ "$(/usr/bin/id -un)" = "$owner" ]; then
