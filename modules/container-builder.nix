@@ -148,8 +148,8 @@ let
     host_key_pub_b64=$(/usr/bin/base64 < "$workdir/ssh_host_ed25519_key.pub" | /usr/bin/tr -d '\n')
     watchdog_b64=$(/usr/bin/base64 < ${escapeShellArg idleWatchdogScript} | /usr/bin/tr -d '\n')
 
-    "$container_bin" machine run -i -n "$machine_name" --root /bin/bash -s <<EOF
-    set -euo pipefail
+    "$container_bin" machine run -i -n "$machine_name" --root /bin/sh -s <<EOF
+    set -eu
 
     ssh_user=${escapeShellArg cfg.sshUser}
     ssh_shell=/bin/bash
@@ -454,7 +454,7 @@ let
     export HB_SOCKTAINER_ERR_LOG=${escapeShellArg "${socktainerStateDirectory}/socktainer.err.log"}
     export HB_SOCKTAINER_OUT_LOG=${escapeShellArg "${socktainerStateDirectory}/socktainer.out.log"}
     export HB_READINESS_LOG=${escapeShellArg readinessLogPath}
-    export HB_IDLE_LOG=${escapeShellArg idleLogPath}
+
     export HB_REMOTE_STORE=${escapeShellArg remoteStore}
     export HB_START_SCRIPT=${escapeShellArg startScript}
     export HB_STOP_SCRIPT=${escapeShellArg stopScript}
