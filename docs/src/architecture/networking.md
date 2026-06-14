@@ -12,7 +12,7 @@ That proxy:
 - sudoes back to the configured runtime-owning macOS user when invoked by root
 - starts the Apple container system if needed
 - creates or updates the builder machine when needed
-- runs `container machine run -i -n <machine> --root -- nc 127.0.0.1 22`
+- runs `container machine run -i -n <machine> --root nc -w 60 127.0.0.1 <ssh-port>`
 - relays SSH directly into guest `sshd`
 
 Because the SSH connection enters through `container machine run`, the host does
