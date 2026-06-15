@@ -97,8 +97,8 @@ on `main`, the workflow also publishes the versioned release tag
 `alpine-3.22-lix-2.95.2-1` for users who prefer to pin.
 
 The builder uses `ssh-ng`. The host SSH path is a generated `ProxyCommand` that
-runs Apple `container machine run --root -i ... nc 127.0.0.1 22`, so the machine starts
-on demand and IP changes do not affect the Nix builder config.
+runs Apple `container machine run --root -i ... nc 127.0.0.1 <containerPort>`,
+so the machine starts on demand and IP changes do not affect the Nix builder config.
 
 The guest `/nix` store lives in the machine's persistent storage. Stop/start
 keeps build outputs and downloaded substitutes. `hb builder reset` deletes and

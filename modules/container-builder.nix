@@ -156,7 +156,6 @@ let
     fi
 
     auth_key_b64=$(/usr/bin/base64 < "$workdir/builder_ed25519.pub" | /usr/bin/tr -d '\n')
-    host_key_b64=$(/usr/bin/base64 < "$workdir/ssh_host_ed25519_key" | /usr/bin/tr -d '\n')
     host_key_pub_b64=$(/usr/bin/base64 < "$workdir/ssh_host_ed25519_key.pub" | /usr/bin/tr -d '\n')
     watchdog_b64=$(/usr/bin/base64 < ${escapeShellArg idleWatchdogScript} | /usr/bin/tr -d '\n')
     /usr/bin/base64 < "$workdir/ssh_host_ed25519_key" | "$container_bin" machine run --root -i -n "$machine_name" /bin/sh -c 'mkdir -p /nix/var/hexbox && base64 -d > /nix/var/hexbox/ssh_host_ed25519_key'
