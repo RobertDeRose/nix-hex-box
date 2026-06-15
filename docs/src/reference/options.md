@@ -7,8 +7,6 @@ Important options:
 - `enable`
 - `hostAlias`
 - `sshUser`
-- `listenAddress`
-- `port`
 - `containerPort`
 - `workingDirectory`
 - `user`
@@ -19,13 +17,11 @@ Important options:
 - `containerName`
 - `imageRepository`
 - `nixVersion`
+- `imageContainerfile`
+- `imageBuildContext`
 - `cpus`
 - `memory`
-- `dns.servers`
-- `dns.search`
-- `dns.options`
-- `dns.domain`
-- `dns.disable`
+- `homeMount`
 - `exposeHostContainerInternal`
 - `systems`
 - `supportedFeatures`
@@ -33,12 +29,10 @@ Important options:
 - `maxJobs`
 - `speedFactor`
 - `protocol`
-- `autoStart`
 - `readiness.timeoutSeconds`
 - `readiness.intervalSeconds`
 - `idleShutdown.enable`
 - `idleShutdown.timeoutSeconds`
-- `bridge.enable`
 - `cli.completions.enable`
 - `socktainer.enable`
 - `socktainer.binary`
@@ -48,14 +42,30 @@ Important options:
 - `socktainer.installer.hash`
 - `socktainer.installer.version`
 
-DNS notes:
+Machine notes:
 
-- `dns.servers` defaults to `[]`, which keeps Apple's default container
-  resolver.
+- `containerName` is the Apple container machine name.
+- `imageRepository` and `nixVersion` combine into the image reference used by
+  `container machine create`.
+- The default image is published by this repository as
+  `ghcr.io/robertderose/nix-hex-box/hexbox-builder:latest`.
+- Scheduled builds refresh `latest`; image-definition changes also publish
+  `alpine-3.22-lix-2.95.2-1` for pinned use. Builder image publishing is
+  skipped until the configured Lix tag is at least seven days old.
+- Set `imageContainerfile` to build a local custom image instead of pulling the
+  default image. `imageBuildContext` supplies an optional build context; without
+  it, HexBox builds with an empty generated context.
+- `homeMount` defaults to `none` so the builder does not mount the host home
+  directory.
+- `idleShutdown.timeoutSeconds` controls the guest watchdog that powers the
+  machine off after no active SSH connections remain.
+
+Host integration notes:
+
 - `exposeHostContainerInternal` defaults to `true` and ensures
   `host.container.internal` exists through `container system dns`.
-- Prefer leaving `dns.servers` empty unless you have verified custom resolvers
-  work correctly with Apple containers in your environment.
+- The Nix builder path uses `ssh-ng` through generated SSH config and
+  `ProxyCommand`; no stable machine IP or published host port is required.
 
 Completion notes:
 

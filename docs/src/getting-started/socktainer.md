@@ -44,5 +44,5 @@ services.container-builder.socktainer = {
 ```
 
 This integration is optional and independent from the Nix remote builder path.
-The module still manages the builder container directly through Apple
-`container`.
+The module still manages the builder machine directly through Apple
+`container machine`.

@@ -10,19 +10,19 @@ hb builder logs readiness
 hb builder logs boot
 ```
 
-Look for guest init failures, SSH startup problems, or bridge/proxy timeouts.
+Look for image build failures, container machine boot failures, guest bootstrap
+failures, SSH startup problems, or `ProxyCommand` errors.
 
 ## Apple container runtime looks unhealthy
 
-The Apple `container` runtime is still an external mutable subsystem. The
-module can reconcile configuration and containers, but it cannot guarantee the
-runtime substrate is always healthy.
+The Apple `container` runtime is still an external mutable subsystem. The module
+can reconcile configuration and machines, but it cannot guarantee the runtime
+substrate is always healthy.
 
 `hb doctor runtime` checks the Apple container runtime and attempts recovery for
-known failure boundaries. `hb builder repair` uses the same runtime recovery
-path before retrying the builder. `hb doctor dns` also restarts the Apple
-container runtime and retries once if external container reachability probes
-fail.
+known failure boundaries. `hb builder repair` uses the same runtime recovery path
+before retrying the builder. `hb doctor dns` also restarts the Apple container
+runtime and retries once if external reachability probes fail.
 
 ## Cache resolution fails inside the guest
 
@@ -33,14 +33,14 @@ reachability to `cache.nixos.org`. If substitute downloads fail, check:
 - upstream cache availability
 - host networking state
 
-## Container recreation lost previous build outputs
+## The machine changed IP address
 
-This is expected in the current runtime model. The guest store is not preserved
-across recreation; outputs are expected to come back from substituters.
+This is expected after stop/start. The Nix builder path does not use the machine
+IP directly; it connects through the generated SSH `ProxyCommand`, which runs
+`container machine run` and relays to guest `sshd` inside the machine.
 
-## Direct port mode behaves differently from bridge mode
+## Previous build outputs disappeared
 
-If `bridge.enable = false`, the host connects through the directly published
-container port instead of the bridge agent. Troubleshooting should then focus on
-the published host socket and container port mapping rather than the launchd
-bridge path.
+The guest `/nix` store persists across normal machine stop/start cycles. If
+outputs disappeared, the machine was probably removed and recreated. `hb builder
+reset` is destructive for guest-local store contents.

@@ -2,19 +2,22 @@
 
 `nix-hex-box` currently follows these design choices:
 
-- upstream pinned `nixos/nix` image instead of a custom prebuilt image
-- generation-aware container recreation
-- on-demand user-side startup through `ProxyCommand`
-- optional bridge for the root daemon path, with direct published-port mode available when disabled
+- published Alpine/Lix-based builder image in this repository's GHCR package
+- optional local custom image builds from `imageContainerfile`
+- persistent Apple `container machine` instead of generation-aware ordinary containers
+- on-demand startup through SSH `ProxyCommand`
+- no localhost bridge or published SSH port in the default builder path
+- guest-side `builder` user with narrow passwordless sudo for the remote `nix-daemon`
 - guest-side idle shutdown using a lightweight watchdog
-- explicit DNS configuration support for builder cache resolution
+- host-side `container machine run` executed as the runtime-owning macOS user, even when SSH is launched by root `nix-daemon`
+- optional Socktainer sidecar for Docker-compatible local tooling
 
 Known constraints:
 
 - Apple `container` remains an external mutable runtime
-- the daemon path still depends on the localhost bridge in current deployments
-- recreating the container loses guest-local build outputs
+- custom local builder image builds depend on the user's Containerfile inputs when configured
+- deleting the container machine deletes guest-local `/nix` store contents
 - host and guest behavior still depend on the health of Apple's virtualization and networking layers
 
-Historical design notes from earlier overlay-based experiments should no longer
-be treated as current behavior.
+Historical design notes from earlier overlay-based and bridge-based experiments
+should no longer be treated as current behavior.
