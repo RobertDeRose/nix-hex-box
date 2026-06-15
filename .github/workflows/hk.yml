@@ -28,6 +28,7 @@ jobs:
             experimental-features = nix-command flakes
       - uses: jdx/mise-action@4444d8fd7a1b92f1821c12f435db40f58b743d26 # v4.0.1
         with:
+          version: 2026.6.6
           install: false
       - name: Install lint tools
         run: |
