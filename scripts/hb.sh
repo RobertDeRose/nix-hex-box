@@ -220,9 +220,9 @@ show_logs() {
   case "$target" in
     idle)
       if [ "$follow" -eq 1 ]; then
-        exec /usr/bin/ssh -F "$ssh_config" "$host_alias" "tail -n '$lines' -f /var/log/hexbox-idle.log"
+        exec /usr/bin/ssh -F "$ssh_config" "$host_alias" "tail -n $lines -f /var/log/hexbox-idle.log"
       else
-        exec /usr/bin/ssh -F "$ssh_config" "$host_alias" "tail -n '$lines' /var/log/hexbox-idle.log"
+        exec /usr/bin/ssh -F "$ssh_config" "$host_alias" "tail -n $lines /var/log/hexbox-idle.log"
       fi
       ;;
     readiness) logfile="$readiness_log" ;;
