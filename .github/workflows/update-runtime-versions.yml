@@ -56,9 +56,6 @@ jobs:
           SOCKTAINER_UPDATED: ${{ steps.check.outputs.socktainer_updated }}
           SOCKTAINER_VERSION: ${{ steps.check.outputs.socktainer_version }}
           CURRENT_SOCKTAINER_VERSION: ${{ steps.check.outputs.current_socktainer_version }}
-          NIX_UPDATED: ${{ steps.check.outputs.nix_updated }}
-          NIX_VERSION: ${{ steps.check.outputs.nix_version }}
-          CURRENT_NIX_VERSION: ${{ steps.check.outputs.current_nix_version }}
         run: |
           set -euo pipefail
 
@@ -74,9 +71,6 @@ jobs:
             fi
             if [ "$SOCKTAINER_UPDATED" = 'true' ]; then
               printf '%s\n' "- Socktainer: \`${CURRENT_SOCKTAINER_VERSION}\` -> \`${SOCKTAINER_VERSION}\`"
-            fi
-            if [ "$NIX_UPDATED" = 'true' ]; then
-              printf '%s\n' "- nixos/nix: \`${CURRENT_NIX_VERSION}\` -> \`${NIX_VERSION}\`"
             fi
           } > "$body_file"
 
