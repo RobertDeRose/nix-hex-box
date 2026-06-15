@@ -33,7 +33,7 @@ _hb() {
           esac
 
           if [ "$COMP_CWORD" -eq 3 ] && [ "${cur#-}" = "$cur" ]; then
-            COMPREPLY=($(compgen -W "idle readiness bridge bridge-out boot" -- "$cur"))
+            COMPREPLY=($(compgen -W "idle readiness boot" -- "$cur"))
             return 0
           fi
 
