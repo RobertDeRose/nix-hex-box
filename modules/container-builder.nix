@@ -291,14 +291,23 @@ let
 
     lock_dir=${escapeShellArg "${workDir}/start.lock"}
     lock_pid_file="$lock_dir/pid"
+    lock_stale_seconds=30
     while ! /bin/mkdir "$lock_dir" 2>/dev/null; do
       lock_pid=""
       if [ -f "$lock_pid_file" ]; then
         lock_pid="$(/bin/cat "$lock_pid_file" 2>/dev/null || true)"
       fi
-      if [ -n "$lock_pid" ] && ! /bin/kill -0 "$lock_pid" 2>/dev/null; then
-        /bin/rm -f "$lock_pid_file" 2>/dev/null || true
-        /bin/rmdir "$lock_dir" 2>/dev/null || true
+      if [ -n "$lock_pid" ]; then
+        if ! /bin/kill -0 "$lock_pid" 2>/dev/null; then
+          /bin/rm -f "$lock_pid_file" 2>/dev/null || true
+          /bin/rmdir "$lock_dir" 2>/dev/null || true
+        fi
+      else
+        now=$(/bin/date +%s)
+        lock_mtime=$(/usr/bin/stat -f %m "$lock_dir" 2>/dev/null || printf '%s\n' "$now")
+        if [ $((now - lock_mtime)) -ge "$lock_stale_seconds" ]; then
+          /bin/rmdir "$lock_dir" 2>/dev/null || true
+        fi
       fi
       /bin/sleep 0.1
     done
