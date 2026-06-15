@@ -296,7 +296,7 @@ let
       if [ -f "$lock_pid_file" ]; then
         lock_pid="$(/bin/cat "$lock_pid_file" 2>/dev/null || true)"
       fi
-      if [ -z "$lock_pid" ] || ! /bin/kill -0 "$lock_pid" 2>/dev/null; then
+      if [ -n "$lock_pid" ] && ! /bin/kill -0 "$lock_pid" 2>/dev/null; then
         /bin/rm -f "$lock_pid_file" 2>/dev/null || true
         /bin/rmdir "$lock_dir" 2>/dev/null || true
       fi
