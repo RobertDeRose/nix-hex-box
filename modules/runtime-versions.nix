@@ -6,9 +6,9 @@
   };
 
   socktainer = {
-    version = "v0.12.0";
-    url = "https://github.com/socktainer/socktainer/releases/download/v0.12.0/socktainer-installer.pkg";
-    hash = "sha256-Yg5OlZ5M4PwnFbBoUpp23JfpN4uNgngG8xIX37hohS4=";
+    version = "v1.0.0";
+    url = "https://github.com/socktainer/socktainer/releases/download/v1.0.0/socktainer-installer.pkg";
+    hash = "sha256-VeBxolTFItpdG/IxDr+MjXuMl8zrQFWwOJY46KzVQ+g=";
   };
 
   nixImage = {
