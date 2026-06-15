@@ -371,10 +371,13 @@ let
     machine_name=${escapeShellArg machineName}
     "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
     if ! rm_output=$("$container_bin" machine rm "$machine_name" 2>&1); then
-      if [[ "$rm_output" != *"not found"* && "$rm_output" != *"No such"* && "$rm_output" != *"does not exist"* ]]; then
-        printf '%s\n' "$rm_output" >&2
-        exit 1
-      fi
+      case "$rm_output" in
+        *"not found"* | *"No such"* | *"does not exist"*) ;;
+        *)
+          printf '%s\n' "$rm_output" >&2
+          exit 1
+          ;;
+      esac
     fi
     exec ${escapeShellArg "${workDir}/start-container.sh"}
   '';

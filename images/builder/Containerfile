@@ -64,6 +64,7 @@ if [ -f /nix/var/hexbox/idle-timeout-seconds ]; then
 elif [ -f /etc/hexbox/idle-timeout-seconds ]; then
   timeout_seconds=$(cat /etc/hexbox/idle-timeout-seconds)
 fi
+ssh_port=$(awk '$1 == "Port" { port = $2 } END { print port ? port : 22 }' /etc/ssh/sshd_config 2>/dev/null || printf '22\n')
 interval_seconds=30
 idle_seconds=0
 log_file=/var/log/hexbox-idle.log
@@ -73,7 +74,7 @@ echo "[$(date)] idle watchdog started timeout=$timeout_seconds"
 
 while true; do
   sleep "$interval_seconds"
-  if ss -H -tn state established '( sport = :22 )' 2>/dev/null | grep -q .; then
+  if ss -H -tn state established "( sport = :$ssh_port )" 2>/dev/null | grep -q .; then
     idle_seconds=0
     echo "[$(date)] active ssh connection detected"
     continue
