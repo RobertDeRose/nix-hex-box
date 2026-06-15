@@ -22,6 +22,14 @@ let
   sshKeyPath = "${workDir}/builder_ed25519";
   hostKeyPath = "${workDir}/ssh_host_ed25519_key";
   knownHostsPath = "${workDir}/known_hosts";
+  knownHostsAliases = concatStringsSep "," [
+    cfg.hostAlias
+    "nix-builder"
+    machineName
+    "[${cfg.hostAlias}]:${toString cfg.containerPort}"
+    "[nix-builder]:${toString cfg.containerPort}"
+    "[${machineName}]:${toString cfg.containerPort}"
+  ];
   readinessLogPath = "${workDir}/hexbox-readiness.log";
   machineName = cfg.containerName;
   builderImageTag = "${cfg.imageRepository}:${cfg.nixVersion}";
@@ -89,7 +97,7 @@ let
     if [ -f "$workdir/ssh_host_ed25519_key.pub" ]; then
       host_key=$(/usr/bin/cut -d ' ' -f 1-2 "$workdir/ssh_host_ed25519_key.pub")
       /bin/cat > "$known_hosts_path" <<EOF
-    ${cfg.hostAlias},nix-builder,${machineName} $host_key
+    ${knownHostsAliases} $host_key
     EOF
       /bin/chmod 0644 "$known_hosts_path"
     fi
@@ -151,15 +159,15 @@ let
     host_key_b64=$(/usr/bin/base64 < "$workdir/ssh_host_ed25519_key" | /usr/bin/tr -d '\n')
     host_key_pub_b64=$(/usr/bin/base64 < "$workdir/ssh_host_ed25519_key.pub" | /usr/bin/tr -d '\n')
     watchdog_b64=$(/usr/bin/base64 < ${escapeShellArg idleWatchdogScript} | /usr/bin/tr -d '\n')
+    /usr/bin/base64 < "$workdir/ssh_host_ed25519_key" | "$container_bin" machine run --root -i -n "$machine_name" /bin/sh -c 'mkdir -p /nix/var/hexbox && base64 -d > /nix/var/hexbox/ssh_host_ed25519_key'
 
-    "$container_bin" machine run --root -i -n "$machine_name" /bin/sh -s "$auth_key_b64" "$host_key_b64" "$host_key_pub_b64" "$watchdog_b64" "$timeout_seconds" "$idle_enable" <<'EOF'
+    "$container_bin" machine run --root -i -n "$machine_name" /bin/sh -s "$auth_key_b64" "$host_key_pub_b64" "$watchdog_b64" "$timeout_seconds" "$idle_enable" <<'EOF'
     set -eu
     auth_key_b64=$1
-    host_key_b64=$2
-    host_key_pub_b64=$3
-    watchdog_b64=$4
-    timeout_seconds=$5
-    idle_enable=$6
+    host_key_pub_b64=$2
+    watchdog_b64=$3
+    timeout_seconds=$4
+    idle_enable=$5
 
     ssh_user=${escapeShellArg cfg.sshUser}
     ssh_shell=/bin/bash
@@ -205,7 +213,10 @@ let
     fi
     mkdir -p "$ssh_home/.ssh"
     printf '%s' "$auth_key_b64" | base64 -d > /nix/var/hexbox/authorized_keys
-    printf '%s' "$host_key_b64" | base64 -d > /nix/var/hexbox/ssh_host_ed25519_key
+    if [ ! -s /nix/var/hexbox/ssh_host_ed25519_key ]; then
+      echo "builder SSH host private key was not transferred" >&2
+      exit 1
+    fi
     printf '%s' "$host_key_pub_b64" | base64 -d > /nix/var/hexbox/ssh_host_ed25519_key.pub
     cp /nix/var/hexbox/authorized_keys "$ssh_home/.ssh/authorized_keys"
     cp /nix/var/hexbox/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key
@@ -445,6 +456,7 @@ let
     Host nix-builder
       HostName ${machineName}
       User ${cfg.sshUser}
+      Port ${toString cfg.containerPort}
       IdentityFile ${sshKeyPath}
       ProxyCommand ${escapeShellArg "${workDir}/proxy.sh"}
       BatchMode yes
@@ -457,6 +469,7 @@ let
     Host ${cfg.hostAlias}
       HostName ${machineName}
       User ${cfg.sshUser}
+      Port ${toString cfg.containerPort}
       IdentityFile ${sshKeyPath}
       ProxyCommand ${escapeShellArg "${workDir}/proxy.sh"}
       BatchMode yes
@@ -823,7 +836,7 @@ in
       if [ -e ${escapeShellArg "${hostKeyPath}.pub"} ]; then
         host_key=$(${pkgs.coreutils}/bin/cut -d ' ' -f 1-2 ${escapeShellArg "${hostKeyPath}.pub"})
         /bin/cat > ${escapeShellArg knownHostsPath} <<EOF
-      ${cfg.hostAlias},nix-builder,${machineName} $host_key
+      ${knownHostsAliases} $host_key
       EOF
       fi
       /usr/sbin/chown -R ${escapeShellArg owner}:staff ${escapeShellArg workDir}
