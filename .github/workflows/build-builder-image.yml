@@ -68,7 +68,7 @@ jobs:
           set -euo pipefail
 
           tags_json=$(mktemp)
-          curl -fsSLo "$tags_json" https://git.lix.systems/api/v1/repos/lix-project/lix/tags
+          curl -fsSLo "$tags_json" 'https://git.lix.systems/api/v1/repos/lix-project/lix/tags?limit=1000'
 
           python3 - "$tags_json" "$LIX_VERSION" "$LIX_RELEASE_COOLDOWN_DAYS" "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY" <<'PY'
           from datetime import datetime, timezone
