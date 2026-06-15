@@ -152,8 +152,14 @@ let
     host_key_pub_b64=$(/usr/bin/base64 < "$workdir/ssh_host_ed25519_key.pub" | /usr/bin/tr -d '\n')
     watchdog_b64=$(/usr/bin/base64 < ${escapeShellArg idleWatchdogScript} | /usr/bin/tr -d '\n')
 
-    "$container_bin" machine run -i -n "$machine_name" --root /bin/sh -s <<EOF
+    "$container_bin" machine run --root -i -n "$machine_name" /bin/sh -s "$auth_key_b64" "$host_key_b64" "$host_key_pub_b64" "$watchdog_b64" "$timeout_seconds" "$idle_enable" <<'EOF'
     set -eu
+    auth_key_b64=$1
+    host_key_b64=$2
+    host_key_pub_b64=$3
+    watchdog_b64=$4
+    timeout_seconds=$5
+    idle_enable=$6
 
     ssh_user=${escapeShellArg cfg.sshUser}
     ssh_shell=/bin/bash
@@ -198,9 +204,9 @@ let
       ssh_home="/home/$ssh_user"
     fi
     mkdir -p "$ssh_home/.ssh"
-    printf '%s' '$auth_key_b64' | base64 -d > /nix/var/hexbox/authorized_keys
-    printf '%s' '$host_key_b64' | base64 -d > /nix/var/hexbox/ssh_host_ed25519_key
-    printf '%s' '$host_key_pub_b64' | base64 -d > /nix/var/hexbox/ssh_host_ed25519_key.pub
+    printf '%s' "$auth_key_b64" | base64 -d > /nix/var/hexbox/authorized_keys
+    printf '%s' "$host_key_b64" | base64 -d > /nix/var/hexbox/ssh_host_ed25519_key
+    printf '%s' "$host_key_pub_b64" | base64 -d > /nix/var/hexbox/ssh_host_ed25519_key.pub
     cp /nix/var/hexbox/authorized_keys "$ssh_home/.ssh/authorized_keys"
     cp /nix/var/hexbox/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key
     cp /nix/var/hexbox/ssh_host_ed25519_key.pub /etc/ssh/ssh_host_ed25519_key.pub
@@ -246,12 +252,12 @@ let
     SSHCONF
     cp /nix/var/hexbox/sshd_config /etc/ssh/sshd_config
 
-    printf '%s' '$watchdog_b64' | base64 -d > /nix/var/hexbox/hexbox-idle-watchdog
+    printf '%s' "$watchdog_b64" | base64 -d > /nix/var/hexbox/hexbox-idle-watchdog
     cp /nix/var/hexbox/hexbox-idle-watchdog /usr/local/bin/hexbox-idle-watchdog
     chmod 0755 /nix/var/hexbox/hexbox-idle-watchdog /usr/local/bin/hexbox-idle-watchdog
 
-    printf '%s\n' '$timeout_seconds' > /nix/var/hexbox/idle-timeout-seconds
-    printf '%s\n' '$idle_enable' > /nix/var/hexbox/idle-enable
+    printf '%s\n' "$timeout_seconds" > /nix/var/hexbox/idle-timeout-seconds
+    printf '%s\n' "$idle_enable" > /nix/var/hexbox/idle-enable
     printf '%s\n' ${escapeShellArg bootstrapVersion} > /nix/var/hexbox/bootstrap-version
     cp /nix/var/hexbox/idle-timeout-seconds /etc/hexbox/idle-timeout-seconds
     cp /nix/var/hexbox/idle-enable /etc/hexbox/idle-enable
@@ -316,21 +322,21 @@ let
         --cpus ${escapeShellArg (toString cfg.cpus)} \
         --memory ${escapeShellArg cfg.memory} \
         --home-mount ${escapeShellArg cfg.homeMount}
-      "$container_bin" machine run -i -n "$machine_name" --root true </dev/null >/dev/null
+      "$container_bin" machine run --root -i -n "$machine_name" true </dev/null >/dev/null
       "$bootstrap_machine"
       "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
-      "$container_bin" machine run -i -n "$machine_name" --root true </dev/null >/dev/null
+      "$container_bin" machine run --root -i -n "$machine_name" true </dev/null >/dev/null
     else
       "$container_bin" machine set -n "$machine_name" \
         cpus=${escapeShellArg (toString cfg.cpus)} \
         memory=${escapeShellArg cfg.memory} \
         home-mount=${escapeShellArg cfg.homeMount} >/dev/null
-      "$container_bin" machine run -i -n "$machine_name" --root true </dev/null >/dev/null
-      current_bootstrap_version=$("$container_bin" machine run -i -n "$machine_name" --root /bin/cat /nix/var/hexbox/bootstrap-version </dev/null 2>/dev/null || true)
+      "$container_bin" machine run --root -i -n "$machine_name" true </dev/null >/dev/null
+      current_bootstrap_version=$("$container_bin" machine run --root -i -n "$machine_name" /bin/cat /nix/var/hexbox/bootstrap-version </dev/null 2>/dev/null || true)
       if [ "$current_bootstrap_version" != "$bootstrap_version" ]; then
         "$bootstrap_machine"
         "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
-        "$container_bin" machine run -i -n "$machine_name" --root true </dev/null >/dev/null
+        "$container_bin" machine run --root -i -n "$machine_name" true </dev/null >/dev/null
       fi
     fi
   '';
@@ -374,7 +380,7 @@ let
         echo "hexbox: failed to start builder machine; run 'hb builder repair' and inspect readiness logs" >&2
         exit 1
       fi
-      exec "$container_bin" machine run -i -n "$machine_name" --root nc -w 60 127.0.0.1 "$container_port"
+      exec "$container_bin" machine run --root -i -n "$machine_name" nc -w 60 127.0.0.1 "$container_port"
     }
 
     if [ "$(/usr/bin/id -un)" = "$owner" ]; then

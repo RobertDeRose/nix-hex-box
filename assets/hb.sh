@@ -491,14 +491,14 @@ doctor() {
 probe_container_dns_name() {
   local host="$1"
 
-  "$container_bin" machine run -n "$container_name" --root getent hosts "$host" > /dev/null 2>&1
+  "$container_bin" machine run --root -n "$container_name" getent hosts "$host" > /dev/null 2>&1
 }
 
 probe_container_tcp_target() {
   local host="$1"
   local port="$2"
 
-  "$container_bin" machine run -n "$container_name" --root nc -zvw5 "$host" "$port" > /dev/null 2>&1
+  "$container_bin" machine run --root -n "$container_name" nc -zvw5 "$host" "$port" > /dev/null 2>&1
 }
 
 # @cmd Check and recover Apple container runtime
