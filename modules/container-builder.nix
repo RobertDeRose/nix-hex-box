@@ -96,9 +96,7 @@ let
 
     if [ -f "$workdir/ssh_host_ed25519_key.pub" ]; then
       host_key=$(/usr/bin/cut -d ' ' -f 1-2 "$workdir/ssh_host_ed25519_key.pub")
-      /bin/cat > "$known_hosts_path" <<EOF
-    ${knownHostsAliases} $host_key
-    EOF
+      /usr/bin/printf '%s %s\n' ${escapeShellArg knownHostsAliases} "$host_key" > "$known_hosts_path"
       /bin/chmod 0644 "$known_hosts_path"
     fi
   '';
@@ -834,9 +832,7 @@ in
       /bin/chmod 0644 ${escapeShellArg readinessLogPath}
       if [ -e ${escapeShellArg "${hostKeyPath}.pub"} ]; then
         host_key=$(${pkgs.coreutils}/bin/cut -d ' ' -f 1-2 ${escapeShellArg "${hostKeyPath}.pub"})
-        /bin/cat > ${escapeShellArg knownHostsPath} <<EOF
-      ${knownHostsAliases} $host_key
-      EOF
+        ${pkgs.coreutils}/bin/printf '%s %s\n' ${escapeShellArg knownHostsAliases} "$host_key" > ${escapeShellArg knownHostsPath}
       fi
       /usr/sbin/chown -R ${escapeShellArg owner}:staff ${escapeShellArg workDir}
 
