@@ -287,7 +287,7 @@ builder::test() {
       name = "hexbox-builder-smoke";
       system = "aarch64-linux";
       builder = "/bin/sh";
-      args = [ "-c" "printf ok > $out" ];
+      args = [ "-c" "printf ok > \"$out\"" ];
     }
   '
 

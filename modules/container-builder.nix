@@ -752,6 +752,10 @@ in
         assertion = pkgs.stdenv.hostPlatform.isDarwin && pkgs.stdenv.hostPlatform.isAarch64;
         message = "`services.container-builder` is currently only supported on aarch64-darwin.";
       }
+      {
+        assertion = cfg.imageBuildContext == null || cfg.imageContainerfile != null;
+        message = "`services.container-builder.imageBuildContext` requires `services.container-builder.imageContainerfile`.";
+      }
     ];
 
     environment.systemPackages = [
@@ -775,7 +779,9 @@ in
       stale_proxy_agent=${escapeShellArg "/Users/${owner}/Library/LaunchAgents/com.github.robertderose.hexbox-proxy.plist"}
       /bin/launchctl bootout "gui/$(/usr/bin/id -u ${escapeShellArg owner})" "$stale_proxy_agent" >/dev/null 2>&1 || true
       /bin/rm -f "$stale_proxy_agent"
-      /bin/rm -f ${escapeShellArg "/Users/${owner}/Library/LaunchAgents/org.nixos.hexbox-machine-proxy.plist"}
+      stale_machine_proxy_agent=${escapeShellArg "/Users/${owner}/Library/LaunchAgents/org.nixos.hexbox-machine-proxy.plist"}
+      /bin/launchctl bootout "gui/$(/usr/bin/id -u ${escapeShellArg owner})" "$stale_machine_proxy_agent" >/dev/null 2>&1 || true
+      /bin/rm -f "$stale_machine_proxy_agent"
 
       ${optionalString cfg.socktainer.enable ''
         if [ ! -x ${escapeShellArg cfg.socktainer.binary} ] || ! ${escapeShellArg cfg.socktainer.binary} --version 2>/dev/null | /usr/bin/grep -q ${escapeShellArg cfg.socktainer.installer.version}; then
