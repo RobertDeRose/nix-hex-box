@@ -8,7 +8,7 @@ local -a doctor_commands doctor_help_commands
 top_commands=('builder' 'socktainer' 'doctor' 'help' '--help' '-h' '--version' '-V')
 builder_commands=('status' 'logs' 'test' 'repair' 'reset' 'gc' 'inspect' 'ssh' 'help')
 builder_help_commands=('status' 'logs' 'test' 'repair' 'reset' 'gc' 'inspect' 'ssh')
-builder_log_targets=('idle' 'readiness' 'bridge' 'bridge-out' 'boot')
+builder_log_targets=('idle' 'readiness' 'boot')
 builder_log_options=('-f' '--follow' '-n' '--lines' '-h' '--help')
 socktainer_commands=('status' 'logs' 'help')
 socktainer_help_commands=('status' 'logs')

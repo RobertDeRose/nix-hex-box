@@ -15,7 +15,7 @@ complete -c hb -n "__fish_seen_subcommand_from builder; and not __fish_seen_subc
 complete -c hb -n "__fish_seen_subcommand_from builder; and not __fish_seen_subcommand_from status logs test repair reset gc inspect ssh help" -a inspect
 complete -c hb -n "__fish_seen_subcommand_from builder; and not __fish_seen_subcommand_from status logs test repair reset gc inspect ssh help" -a ssh
 complete -c hb -n "__fish_seen_subcommand_from builder; and not __fish_seen_subcommand_from status logs test repair reset gc inspect ssh help" -a help
-complete -c hb -n "__fish_seen_subcommand_from builder logs" -a "idle readiness bridge bridge-out boot"
+complete -c hb -n "__fish_seen_subcommand_from builder logs" -a "idle readiness boot"
 complete -c hb -n "__fish_seen_subcommand_from builder logs" -l follow -s f
 complete -c hb -n "__fish_seen_subcommand_from builder logs" -l lines -s n
 
