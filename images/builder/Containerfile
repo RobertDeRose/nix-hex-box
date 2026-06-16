@@ -19,11 +19,30 @@ RUN apk add --no-cache \
       xz
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+COPY patch-lix-plan.py /tmp/patch-lix-plan.py
 
-RUN curl -sSf -L --proto '=https' --proto-redir '=https' -o /tmp/lix-installer https://install.lix.systems/lix && \
-    NIX_INSTALLER_BINARY_ROOT="https://install.lix.systems/lix/${LIX_VERSION}" \
-      sh /tmp/lix-installer install linux --no-confirm --init none && \
-    rm -f /tmp/lix-installer
+
+RUN apk add --no-cache --virtual .hexbox-plan-tools python3 && \
+    installer_arch="$(uname -m)-linux" && \
+    curl -sSf -L --proto '=https' --proto-redir '=https' \
+      -o /tmp/lix-installer \
+      "https://install.lix.systems/lix/${LIX_VERSION}/lix-installer-${installer_arch}" && \
+    chmod 0755 /tmp/lix-installer && \
+    /tmp/lix-installer plan linux --init none --no-modify-profile > /tmp/lix-plan.json && \
+    python3 /tmp/patch-lix-plan.py && \
+    /tmp/lix-installer install --no-confirm /tmp/lix-plan.json && \
+    lix_store_matches="$(find /nix/store -maxdepth 1 -type d -name "*-lix-${LIX_VERSION}" -print)" && \
+    set -- $lix_store_matches && \
+    if [ "$#" -ne 1 ]; then \
+      echo "ERROR: expected one Lix ${LIX_VERSION} store path, found $#" >&2; \
+      find /nix/store -maxdepth 1 -type d -name "*-lix-*" -print >&2; \
+      exit 1; \
+    fi && \
+    lix_store="$1" && \
+    mkdir -p /nix/var/nix/profiles && \
+    ln -sfn "$lix_store" /nix/var/nix/profiles/default && \
+    rm -f /tmp/lix-installer /tmp/lix-plan.json /tmp/patch-lix-plan.py && \
+    apk del .hexbox-plan-tools
 
 RUN mkdir -p /etc/hexbox /etc/machine /run/sshd /usr/local/bin /var/empty && \
     adduser -D -s /bin/bash builder && \

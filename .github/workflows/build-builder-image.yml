@@ -10,6 +10,7 @@ on:
     paths:
       - .github/workflows/build-builder-image.yml
       - images/builder/Containerfile
+      - images/builder/patch-lix-plan.py
       - modules/runtime-versions.nix
 
 permissions:
@@ -38,10 +39,10 @@ jobs:
         id: image
         run: |
           set -euo pipefail
-          repository=$(nix eval --raw --expr '(import ./modules/runtime-versions.nix).builderImage.repository')
-          version=$(nix eval --raw --expr '(import ./modules/runtime-versions.nix).builderImage.version')
-          release_tag=$(nix eval --raw --expr '(import ./modules/runtime-versions.nix).builderImage.releaseTag')
-          lix_version=$(nix eval --raw --expr '(import ./modules/runtime-versions.nix).builderImage.lixVersion')
+          repository=$(nix eval --impure --raw --expr '(import ./modules/runtime-versions.nix).builderImage.repository')
+          version=$(nix eval --impure --raw --expr '(import ./modules/runtime-versions.nix).builderImage.version')
+          release_tag=$(nix eval --impure --raw --expr '(import ./modules/runtime-versions.nix).builderImage.releaseTag')
+          lix_version=$(nix eval --impure --raw --expr '(import ./modules/runtime-versions.nix).builderImage.lixVersion')
           if [ -z "$repository" ] || [ -z "$version" ] || [ -z "$release_tag" ] || [ -z "$lix_version" ]; then
             echo 'failed to resolve builder image metadata' >&2
             exit 1
