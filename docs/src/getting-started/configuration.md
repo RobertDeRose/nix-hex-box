@@ -8,7 +8,6 @@ services.container-builder = {
   cpus = 4;
   memory = "8G";
   maxJobs = 4;
-  bridge.enable = true;
   # Optional Docker API compatibility layer:
   # socktainer.enable = true;
 };
@@ -17,44 +16,51 @@ services.container-builder = {
 Common settings to review first:
 
 - `hostAlias`
-- `port`
-- `listenAddress`
 - `cpus`
 - `memory`
+- `homeMount`
 - `maxJobs`
-- `bridge.enable`
 - `protocol`
 - `idleShutdown.enable`
 - `idleShutdown.timeoutSeconds`
-- `dns.*`
 - `imageRepository`
 - `nixVersion`
+- `imageContainerfile`
+- `imageBuildContext`
 - `socktainer.enable`
 
-The default image is the upstream pinned image:
+The default image is pulled from this repository's GitHub Container Registry
+package:
 
 ```text
-docker.io/nixos/nix:2.34.6
+ghcr.io/robertderose/nix-hex-box/hexbox-builder:latest
 ```
 
-The container guest writes a minimal `nix.conf` that uses
+Scheduled builds refresh `latest` for Alpine package updates, such as OpenSSH
+fixes. Builder image publishing is skipped until the configured Lix tag is at
+least seven days old. Image-definition changes on `main` also publish the
+versioned tag `alpine-3.22-lix-2.95.2-1` for users who prefer a pinned image.
+
+The image contains Alpine 3.22, OpenSSH, sudo, and Lix. Set
+`imageContainerfile` to build a local custom image instead. Set
+`imageBuildContext` to an absolute host path string when the custom image needs
+a build context. Runtime bootstrap writes a minimal `nix.conf` that uses
 `https://cache.nixos.org/` by default.
 
 Current default behavior to keep in mind:
 
-- `bridge.enable = true`
 - `protocol = "ssh-ng"`
 - `hostAlias = "container-builder"`
-- `listenAddress = "127.0.0.1"`
-- `port = 2222`
-- `dns.servers = [ ]` to preserve Apple's default container resolver
+- `containerName = "nix-builder"`
+- `homeMount = "none"`
+- `idleShutdown.enable = true`
+- `idleShutdown.timeoutSeconds = 300`
 - `exposeHostContainerInternal = true`
 - `cli.completions.enable = false`
 
-Avoid setting `dns.servers` unless you have verified the chosen resolvers work
-correctly with Apple containers in your environment. In local testing,
-overriding DNS with public resolvers broke both `host.container.internal` and
-normal external lookups from inside the builder container.
+The builder machine does not mount the host home directory by default. Set
+`homeMount = "ro"` or `homeMount = "rw"` only when the builder needs explicit
+access to host files.
 
 If you want shell completions for `hb`, enable:
 
