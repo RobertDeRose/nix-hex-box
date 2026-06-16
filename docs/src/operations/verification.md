@@ -30,10 +30,10 @@ than accepted blindly.
 retrying the builder startup path. It also verifies:
 
 - container system health
-- bridge agent presence
-- current builder container status
+- builder image availability, building a configured custom image when missing
+- current builder machine status
 - SSH handshake success
-- outbound container TCP reachability for common external domains
+- outbound builder TCP reachability for common external domains
 - remote store reachability from the host side
 
 Other useful helper commands:
@@ -48,9 +48,9 @@ Other useful helper commands:
 - `hb doctor host`
 - `hb doctor host 22`
 
-If guest-side DNS looks wrong, first verify the defaults before setting custom
-`dns.servers`. The default Apple resolver should allow both normal external
-lookups and `host.container.internal` from inside the container.
+If guest-side DNS looks wrong, first verify the Apple defaults. The default
+resolver should allow both normal external lookups and `host.container.internal`
+from inside the builder machine.
 
 If Socktainer is enabled, useful checks include:
 

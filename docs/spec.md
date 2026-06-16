@@ -1,53 +1,76 @@
-# HexBox Spec
+# HexBox Specification
 
-## Current State
+## Scope
 
-- `services.container-builder` is a working `nix-darwin` module for an Apple Container based `aarch64-linux` Nix builder.
-- It declares:
-  - `nix.buildMachines`
-  - SSH config for `nix-builder` and `container-builder`
-  - helper scripts in `/Users/<username>/.local/state/hb`
-  - an optional bridge user agent
-  - readiness checks before considering startup successful
-  - idempotent builder start and generation-aware container recreation
-  - guest-side idle shutdown based on active SSH sessions
-- The default image is `docker.io/nixos/nix:2.34.6`.
-- The user-side SSH path wakes the builder on demand with `ProxyCommand ~/.local/state/hb/proxy.sh`.
-- The root `nix-daemon` path still uses the localhost bridge as the compatible transport for daemon-driven builds.
+`nix-hex-box` provides a `nix-darwin` module that turns Apple `container` into a
+local `aarch64-linux` remote builder for Nix.
+
+The module declares and manages:
+
+- `nix.buildMachines`
+- SSH config for `nix-builder` and `container-builder`
+- helper scripts in `/Users/<username>/.local/state/hb`
+- an optional custom builder-image Containerfile
+- a persistent Apple `container machine`
+- readiness checks before considering startup successful
+- guest-side idle shutdown based on active SSH connections
+
+The default image is pulled from this repository's GitHub Container Registry
+package as
+`ghcr.io/robertderose/nix-hex-box/hexbox-builder:latest`.
+
+Scheduled builds refresh `latest` for Alpine package updates. Image-definition
+changes on `main` also publish the versioned tag
+`alpine-3.22-lix-2.95.2-1`.
+
+Users can set `services.container-builder.imageContainerfile` to build a local
+custom image instead.
 
 ## Runtime Model
 
-- Durable state lives under `/Users/<username>/.local/state/hb`.
-- The builder container is generation-stamped and reused across restarts when possible.
-- `/nix` inside the guest uses the image's built-in store directly. Build outputs live in the container's writable layer and are lost on container recreation, but are re-fetched from cache as needed.
-- When idle shutdown is enabled, `procps` is installed lazily in the background on first boot so the watchdog can use `ps` without delaying SSH startup.
-- The watchdog runs inside the guest, checks `ps -ef | grep 'sshd-sessio[n]'`, and stops `sshd` after the configured idle timeout.
-- Once idle shutdown fires, the builder remains offline until the proxy path or helper starts it again.
+- Durable host state lives under `/Users/<username>/.local/state/hb`.
+- The builder is a persistent Apple `container machine` named by
+  `services.container-builder.containerName`.
+- The guest `/nix` store lives in the machine's persistent storage and survives
+  stop/start cycles.
+- `hb builder reset` removes and recreates the machine, which deletes guest-local
+  store contents.
+- SSH access uses `ProxyCommand ~/.local/state/hb/proxy.sh`.
+- The proxy uses `container machine run --root -i ... nc 127.0.0.1 <containerPort>`,
+  so it starts the machine on demand and does not depend on a stable machine IP.
+- When invoked by macOS root, the proxy sudoes back to the runtime-owning user
+  before running Apple `container`.
+- The guest SSH user is `builder`.
+- The remote `nix-daemon` is reached through a narrow passwordless sudo wrapper
+  inside the guest.
+- When idle shutdown is enabled, a guest watchdog watches active SSH
+  connections and stops `sshd` after the configured timeout, which powers the machine off.
 
-## Operational Notes
+## Helper Commands
 
-- Main helper entrypoint: `hb`
-- Important generated files live in `~/.local/state/hb/`, including:
-  - `init.sh`
-  - `proxy.sh`
-  - `start-container.sh`
-  - `stop-container.sh`
-  - `ssh_config`
-  - `ssh_config_root`
-  - `hexbox-readiness.log`
-  - `hexbox-idle.log`
-  - `init-debug.log`
-  - `hexbox-bridge`
-- Typical health checks:
-  - `hb builder`
-  - `hb builder repair`
-  - `hb doctor runtime`
-  - `ssh nix-builder true`
-  - `nix store ping --store ssh-ng://container-builder`
+The `hb` helper exposes:
+
+- `hb builder status`
+- `hb builder repair`
+- `hb builder test`
+- `hb builder reset`
+- `hb builder ssh`
+- `hb builder inspect`
+- `hb builder logs readiness`
+- `hb builder logs boot`
+- `hb builder logs idle`
+- `hb doctor`
+- `hb doctor runtime`
+- `hb doctor dns`
+- `hb doctor host [PORT]`
 
 ## Known Constraints
 
-- Apple `container` is still an external mutable runtime and can require operational recovery.
-- The root daemon path still depends on the localhost bridge rather than direct published ports.
-- Recreating the builder container loses any cached build outputs, but they are re-fetched from substituters on the next build.
-- macOS virtualization only offers partial memory ballooning, so reclaimed guest memory is returned reliably when the builder stops rather than continuously while it stays running.
+- Apple `container` is still an external mutable runtime and can require
+  operational recovery.
+- The default builder image depends on GHCR availability. Custom local image
+  builds depend on the configured Containerfile inputs.
+- Removing the builder machine removes guest-local build outputs.
+- macOS virtualization only offers partial memory ballooning, so reclaimed guest
+  memory is returned reliably when the builder powers off rather than
+  continuously while it stays running.
