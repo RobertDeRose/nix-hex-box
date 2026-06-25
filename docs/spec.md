@@ -36,8 +36,9 @@ custom image instead.
 - `hb builder reset` removes and recreates the machine, which deletes guest-local
   store contents.
 - SSH access uses `ProxyCommand ~/.local/state/hb/proxy.sh`.
-- The proxy uses `container machine run --root -i ... nc 127.0.0.1 <containerPort>`,
-  so it starts the machine on demand and does not depend on a stable machine IP.
+- The proxy uses `container machine run --root -i ... nc -N 127.0.0.1 <containerPort>`,
+  so it starts the machine on demand, closes cleanly when SSH finishes, and does
+  not depend on a stable machine IP.
 - When invoked by macOS root, the proxy sudoes back to the runtime-owning user
   before running Apple `container`.
 - The guest SSH user is `builder`.

@@ -275,11 +275,11 @@ builder::logs() {
   show_logs "$argc_target" "${argc_follow:-0}" "$lines"
 }
 
-# @cmd Run a simple remote build smoke test through the builder
-builder::test() {
-  hb_init
+run_remote_build_smoke() {
   local expr
   local output_path
+  local smoke_timeout_seconds=60
+  local status
   local -a build_args
 
   expr='
@@ -291,7 +291,6 @@ builder::test() {
     }
   '
 
-  builder::repair
   print_heading '🧪' 'Remote build smoke test (trivial aarch64-linux derivation)'
 
   output_path=$(nix eval --raw --impure --expr "(${expr}).outPath")
@@ -309,7 +308,49 @@ builder::test() {
     build_args+=(--rebuild)
   fi
 
-  exec nix "${build_args[@]}"
+  set +e
+  /usr/bin/perl -e '
+    my $timeout = shift @ARGV;
+    my $pid = fork();
+    die "failed to fork: $!\n" unless defined $pid;
+    if ($pid == 0) {
+      setpgrp(0, 0);
+      exec @ARGV or die "failed to exec @ARGV: $!\n";
+    }
+    sub terminate_child {
+      my ($signal, $exit_status) = @_;
+      kill $signal, -$pid;
+      select undef, undef, undef, 1;
+      kill "KILL", -$pid;
+      waitpid($pid, 0);
+      exit $exit_status;
+    }
+    local $SIG{ALRM} = sub { terminate_child("TERM", 124) };
+    local $SIG{INT} = sub { terminate_child("INT", 130) };
+    local $SIG{TERM} = sub { terminate_child("TERM", 143) };
+    local $SIG{HUP} = sub { terminate_child("HUP", 129) };
+    alarm $timeout;
+    waitpid($pid, 0);
+    my $status = $?;
+    alarm 0;
+    exit 128 + ($status & 127) if $status & 127;
+    exit $status >> 8;
+  ' "$smoke_timeout_seconds" nix "${build_args[@]}"
+  status=$?
+  set -e
+
+  if [ "$status" -eq 124 ]; then
+    print_error "Remote build smoke test timed out after ${smoke_timeout_seconds}s"
+    return 124
+  fi
+
+  return "$status"
+}
+
+# @cmd Run a simple remote build smoke test through the builder
+builder::test() {
+  hb_init
+  builder::repair
 }
 
 # @cmd Verify builder health and recover runtime if needed
@@ -361,6 +402,8 @@ builder::repair() {
     print_mark fail 'Host cannot reach remote store'
     exit 1
   fi
+
+  run_remote_build_smoke
 }
 
 # @cmd Destroy and recreate the builder machine

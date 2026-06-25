@@ -147,24 +147,34 @@ let
     workdir=${escapeShellArg workDir}
     timeout_seconds=${escapeShellArg (toString cfg.idleShutdown.timeoutSeconds)}
     idle_enable=${boolToString cfg.idleShutdown.enable}
+    /bin/mkdir -p "$workdir"
+    cd "$workdir"
 
     if [ ! -f "$workdir/builder_ed25519.pub" ] || [ ! -f "$workdir/ssh_host_ed25519_key" ] || [ ! -f "$workdir/ssh_host_ed25519_key.pub" ]; then
       echo "container-builder keys missing in $workdir; run $workdir/bootstrap-keys.sh first" >&2
       exit 1
     fi
 
-    if ! "$container_bin" machine run --root -i -n "$machine_name" /bin/sh -s <<'BASE64_CHECK'
-    command -v base64 >/dev/null 2>&1
-    BASE64_CHECK
-    then
-      echo "base64 is required inside the builder image for HexBox bootstrap" >&2
+    if ! preflight_output=$({
+      /usr/bin/printf '%s\n' \
+        'command -v base64 >/dev/null 2>&1 || { echo "base64 is required inside the builder image for HexBox bootstrap" >&2; exit 1; }' \
+        'command -v nc >/dev/null 2>&1 || { echo "nc is required inside the builder image for HexBox SSH proxy" >&2; exit 1; }' \
+        'nc_help=$(nc -h 2>&1 || true)' \
+        'case "$nc_help" in' \
+        '  *" -N"* | *"[-"*N* ) ;;' \
+        '  *) echo "OpenBSD nc with -N support is required inside the builder image for HexBox SSH proxy" >&2; exit 1 ;;' \
+        'esac'
+    } | "$container_bin" machine run --root -i -n "$machine_name" /bin/sh -s 2>&1); then
+      echo "hexbox: failed to run bootstrap preflight in builder machine $machine_name" >&2
+      echo "hexbox: container machine run output:" >&2
+      printf '%s\n' "$preflight_output" >&2
       exit 1
     fi
 
     auth_key_b64=$(/usr/bin/base64 < "$workdir/builder_ed25519.pub" | /usr/bin/tr -d '\n')
     host_key_pub_b64=$(/usr/bin/base64 < "$workdir/ssh_host_ed25519_key.pub" | /usr/bin/tr -d '\n')
     watchdog_b64=$(/usr/bin/base64 < ${escapeShellArg idleWatchdogScript} | /usr/bin/tr -d '\n')
-    {
+    if ! host_key_output=$({
       /bin/cat <<'HOST_KEY_TRANSFER'
     set -eu
     mkdir -p /nix/var/hexbox
@@ -172,9 +182,14 @@ let
     HOST_KEY_TRANSFER
       /usr/bin/base64 < "$workdir/ssh_host_ed25519_key"
       /usr/bin/printf '\nHOST_KEY_PAYLOAD\n'
-    } | "$container_bin" machine run --root -i -n "$machine_name" /bin/sh -s
+    } | "$container_bin" machine run --root -i -n "$machine_name" /bin/sh -s 2>&1); then
+      echo "hexbox: failed to transfer builder SSH host key into $machine_name" >&2
+      echo "hexbox: container machine run output:" >&2
+      printf '%s\n' "$host_key_output" >&2
+      exit 1
+    fi
 
-    "$container_bin" machine run --root -i -n "$machine_name" /bin/sh -s "$auth_key_b64" "$host_key_pub_b64" "$watchdog_b64" "$timeout_seconds" "$idle_enable" <<'EOF'
+    if ! bootstrap_output=$("$container_bin" machine run --root -i -n "$machine_name" /bin/sh -s "$auth_key_b64" "$host_key_pub_b64" "$watchdog_b64" "$timeout_seconds" "$idle_enable" <<'EOF'
     set -eu
     auth_key_b64=$1
     host_key_pub_b64=$2
@@ -291,6 +306,12 @@ let
       kill -HUP 1 2>/dev/null || true
     fi
     EOF
+    ); then
+      echo "hexbox: failed to apply builder machine bootstrap to $machine_name" >&2
+      echo "hexbox: container machine run output:" >&2
+      printf '%s\n' "$bootstrap_output" >&2
+      exit 1
+    fi
   '';
 
   startScript = pkgs.writeShellScript "hexbox-start-machine" ''
@@ -329,6 +350,75 @@ let
     image_tag=${escapeShellArg builderImageTag}
     bootstrap_machine=${escapeShellArg machineBootstrapScript}
     bootstrap_version=${escapeShellArg bootstrapVersion}
+    workdir=${escapeShellArg workDir}
+    /bin/mkdir -p "$workdir"
+    cd "$workdir"
+
+    machine_status() {
+      "$container_bin" machine inspect "$machine_name" 2>/dev/null | /usr/bin/awk -F'"' '/"status"/ { print $4; exit }'
+    }
+
+    machine_reaches_status() {
+      desired_status=$1
+      attempts=60
+      while [ "$attempts" -gt 0 ]; do
+        current_status=$(machine_status || true)
+        if [ "$current_status" = "$desired_status" ]; then
+          return 0
+        fi
+        attempts=$((attempts - 1))
+        /bin/sleep 0.5
+      done
+      return 1
+    }
+
+    wait_machine_status() {
+      desired_status=$1
+      if machine_reaches_status "$desired_status"; then
+        return 0
+      fi
+      echo "hexbox: builder machine $machine_name did not reach status $desired_status" >&2
+      "$container_bin" machine inspect "$machine_name" >&2 || true
+      exit 1
+    }
+
+    stop_machine() {
+      attempts=60
+      while [ "$attempts" -gt 0 ]; do
+        current_status=$(machine_status || true)
+        if [ "$current_status" = stopped ]; then
+          return 0
+        fi
+        ${pkgs.coreutils}/bin/timeout 15 "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
+        attempts=$((attempts - 1))
+        /bin/sleep 0.5
+      done
+      echo "hexbox: builder machine $machine_name did not stop" >&2
+      "$container_bin" machine inspect "$machine_name" >&2 || true
+      exit 1
+    }
+
+    boot_machine() {
+      if "$container_bin" machine inspect "$machine_name" 2>/dev/null | /usr/bin/grep -q '"status"[[:space:]]*:[[:space:]]*"running"'; then
+        return 0
+      fi
+      attempts=3
+      while [ "$attempts" -gt 0 ]; do
+        if boot_output=$("$container_bin" machine run --root -d -n "$machine_name" /sbin/init 2>&1); then
+          wait_machine_status running
+          return 0
+        fi
+        attempts=$((attempts - 1))
+        if [ "$attempts" -gt 0 ]; then
+          "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
+          /bin/sleep 2
+        fi
+      done
+      echo "hexbox: failed to boot builder machine $machine_name" >&2
+      echo "hexbox: container machine run output:" >&2
+      printf '%s\n' "$boot_output" >&2
+      exit 1
+    }
     ${optionalString hasCustomImageContainerfile ''
       image_containerfile=${escapeShellArg "${workDir}/builder-image/Containerfile"}
       image_context=${escapeShellArg customImageBuildContext}
@@ -350,26 +440,62 @@ let
 
     if ! "$container_bin" machine inspect "$machine_name" >/dev/null 2>&1; then
       echo "creating HexBox container machine $machine_name" >&2
-      "$container_bin" machine create "$image_tag" \
+      set +e
+      create_output=$(${pkgs.coreutils}/bin/timeout 60 "$container_bin" machine create "$image_tag" \
         --name "$machine_name" \
         --cpus ${escapeShellArg (toString cfg.cpus)} \
         --memory ${escapeShellArg cfg.memory} \
-        --home-mount ${escapeShellArg cfg.homeMount}
-      "$container_bin" machine run --root -i -n "$machine_name" true </dev/null >/dev/null
+        --home-mount ${escapeShellArg cfg.homeMount} 2>&1)
+      create_status=$?
+      set -e
+      if [ "$create_status" -ne 0 ]; then
+        echo "hexbox: container machine create exited with status $create_status" >&2
+        echo "hexbox: container machine create output:" >&2
+        printf '%s\n' "$create_output" >&2
+        if "$container_bin" machine inspect "$machine_name" >/dev/null 2>&1 && machine_reaches_status running; then
+          echo "hexbox: created machine $machine_name reached running state after create returned an error; continuing" >&2
+        else
+          echo "hexbox: retrying create after Apple container service restart" >&2
+          ${pkgs.coreutils}/bin/timeout 60 "$container_bin" system stop >/dev/null 2>&1 || true
+          "$container_bin" system start >/dev/null
+          if "$container_bin" machine inspect "$machine_name" >/dev/null 2>&1; then
+            ${pkgs.coreutils}/bin/timeout 60 "$container_bin" machine rm "$machine_name" >/dev/null 2>&1 || true
+          fi
+          set +e
+          create_output=$(${pkgs.coreutils}/bin/timeout 60 "$container_bin" machine create "$image_tag" \
+            --name "$machine_name" \
+            --cpus ${escapeShellArg (toString cfg.cpus)} \
+            --memory ${escapeShellArg cfg.memory} \
+            --home-mount ${escapeShellArg cfg.homeMount} 2>&1)
+          create_status=$?
+          set -e
+          if [ "$create_status" -ne 0 ]; then
+            if "$container_bin" machine inspect "$machine_name" >/dev/null 2>&1 && machine_reaches_status running; then
+              echo "hexbox: created machine $machine_name reached running state after retry returned an error; continuing" >&2
+            else
+              echo "hexbox: failed to create builder machine $machine_name from image $image_tag" >&2
+              echo "hexbox: container machine create output:" >&2
+              printf '%s\n' "$create_output" >&2
+              exit 1
+            fi
+          fi
+        fi
+      fi
+      stop_machine
       "$bootstrap_machine"
-      "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
-      "$container_bin" machine run --root -i -n "$machine_name" true </dev/null >/dev/null
+      stop_machine
+      boot_machine
     else
       "$container_bin" machine set -n "$machine_name" \
         cpus=${escapeShellArg (toString cfg.cpus)} \
         memory=${escapeShellArg cfg.memory} \
         home-mount=${escapeShellArg cfg.homeMount} >/dev/null
-      "$container_bin" machine run --root -i -n "$machine_name" true </dev/null >/dev/null
+      boot_machine
       current_bootstrap_version=$("$container_bin" machine run --root -i -n "$machine_name" /bin/cat /nix/var/hexbox/bootstrap-version </dev/null 2>/dev/null || true)
       if [ "$current_bootstrap_version" != "$bootstrap_version" ]; then
+        stop_machine
         "$bootstrap_machine"
-        "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
-        "$container_bin" machine run --root -i -n "$machine_name" true </dev/null >/dev/null
+        boot_machine
       fi
     fi
   '';
@@ -379,7 +505,7 @@ let
     if [ "$(/usr/bin/id -un)" != ${escapeShellArg owner} ]; then
       exec /usr/bin/sudo -n -u ${escapeShellArg owner} -H "$0"
     fi
-    exec ${escapeShellArg cfg.containerBinary} machine stop ${escapeShellArg machineName}
+    exec ${pkgs.coreutils}/bin/timeout 30 ${escapeShellArg cfg.containerBinary} machine stop ${escapeShellArg machineName}
   '';
 
   resetScript = pkgs.writeShellScript "hexbox-reset-machine" ''
@@ -389,8 +515,29 @@ let
     fi
     container_bin=${escapeShellArg cfg.containerBinary}
     machine_name=${escapeShellArg machineName}
-    "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
-    if ! rm_output=$("$container_bin" machine rm "$machine_name" 2>&1); then
+    ${pkgs.coreutils}/bin/timeout 30 "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
+    set +e
+    rm_output=$(${pkgs.coreutils}/bin/timeout 60 "$container_bin" machine rm "$machine_name" 2>&1)
+    rm_status=$?
+    set -e
+    if [ "$rm_status" -ne 0 ]; then
+      if ! "$container_bin" machine inspect "$machine_name" >/dev/null 2>&1; then
+        rm_status=0
+      fi
+    fi
+    if [ "$rm_status" -ne 0 ]; then
+      echo "hexbox: container machine rm did not complete; restarting Apple container services and retrying" >&2
+      ${pkgs.coreutils}/bin/timeout 60 "$container_bin" system stop >/dev/null 2>&1 || true
+      "$container_bin" system start >/dev/null
+      set +e
+      rm_output=$(${pkgs.coreutils}/bin/timeout 60 "$container_bin" machine rm "$machine_name" 2>&1)
+      rm_status=$?
+      set -e
+      if [ "$rm_status" -ne 0 ] && ! "$container_bin" machine inspect "$machine_name" >/dev/null 2>&1; then
+        rm_status=0
+      fi
+    fi
+    if [ "$rm_status" -ne 0 ]; then
       case "$rm_output" in
         *"not found"* | *"No such"* | *"does not exist"*) ;;
         *)
@@ -430,7 +577,7 @@ let
         echo "hexbox: builder SSH did not become ready; run 'hb builder repair' and inspect readiness logs" >&2
         exit 1
       fi
-      exec "$container_bin" machine run --root -i -n "$machine_name" nc 127.0.0.1 "$container_port"
+      exec "$container_bin" machine run --root -i -n "$machine_name" nc -N 127.0.0.1 "$container_port"
     }
 
     if [ "$(/usr/bin/id -un)" = "$owner" ]; then
