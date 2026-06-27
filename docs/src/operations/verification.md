@@ -10,6 +10,7 @@ Recovery-aware verification path:
 
 ```bash
 hb builder repair
+hb builder test
 ```
 
 Useful checks after activation:
@@ -35,6 +36,9 @@ retrying the builder startup path. It also verifies:
 - SSH handshake success
 - outbound builder TCP reachability for common external domains
 - remote store reachability from the host side
+
+After repair succeeds, `hb builder test` runs a timed trivial remote build
+through the builder.
 
 Other useful helper commands:
 

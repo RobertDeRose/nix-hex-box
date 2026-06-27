@@ -209,6 +209,10 @@ builder::status() {
   print_state_row 'builder machine' "$machine_kind" "$machine_text"
   print_state_row 'ssh handshake' "$ssh_kind" "$ssh_text"
   print_state_row 'remote store' "$remote_kind" "$remote_text"
+
+  if [ "$system_kind" != ok ] || [ "$machine_kind" != ok ] || [ "$ssh_kind" != ok ] || [ "$remote_kind" != ok ]; then
+    print_mark info 'Run hb builder repair to recover the builder.'
+  fi
 }
 
 show_logs() {
@@ -350,12 +354,14 @@ run_remote_build_smoke() {
 # @cmd Run a simple remote build smoke test through the builder
 builder::test() {
   hb_init
-  builder::repair
+  builder::repair 0
+  run_remote_build_smoke
 }
 
 # @cmd Verify builder health and recover runtime if needed
 builder::repair() {
   hb_init
+  local recommend_test="${1:-1}"
   local readiness_attempt=1
   local readiness_ok=0
 
@@ -403,7 +409,9 @@ builder::repair() {
     exit 1
   fi
 
-  run_remote_build_smoke
+  if [ "$recommend_test" -eq 1 ]; then
+    print_mark info 'Run hb builder test to verify remote builds.'
+  fi
 }
 
 # @cmd Destroy and recreate the builder machine
