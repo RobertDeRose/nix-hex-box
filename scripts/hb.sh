@@ -354,28 +354,33 @@ run_remote_build_smoke() {
 # @cmd Run a simple remote build smoke test through the builder
 builder::test() {
   hb_init
-  builder::repair 0
   run_remote_build_smoke
+}
+
+repair_failed() {
+  print_mark info 'Run hb builder reset to recreate the builder machine.'
+  exit 1
 }
 
 # @cmd Verify builder health and recover runtime if needed
 builder::repair() {
   hb_init
-  local recommend_test="${1:-1}"
   local readiness_attempt=1
   local readiness_ok=0
 
   if ! doctor_runtime_impl; then
-    exit 1
+    repair_failed
   fi
 
-  "$start_script"
+  if ! "$start_script"; then
+    repair_failed
+  fi
 
   if status_container | /usr/bin/grep -q '"status"[[:space:]]*:[[:space:]]*"running"'; then
     print_mark ok 'Builder machine running'
   else
     print_mark fail 'Builder machine not running'
-    exit 1
+    repair_failed
   fi
 
   while [ "$readiness_attempt" -le 3 ]; do
@@ -395,23 +400,21 @@ builder::repair() {
     print_mark ok 'SSH handshake succeeded'
   else
     print_mark fail 'SSH handshake failed'
-    exit 1
+    repair_failed
   fi
 
   if ! probe_common_external_domains; then
-    exit 1
+    repair_failed
   fi
 
   if nix store ping --store "$remote_store" > /dev/null 2>&1; then
     print_mark ok 'Host can reach remote store'
   else
     print_mark fail 'Host cannot reach remote store'
-    exit 1
+    repair_failed
   fi
 
-  if [ "$recommend_test" -eq 1 ]; then
-    print_mark info 'Run hb builder test to verify remote builds.'
-  fi
+  print_mark info 'Run hb builder test to verify remote builds.'
 }
 
 # @cmd Destroy and recreate the builder machine
