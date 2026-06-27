@@ -118,8 +118,11 @@ Available image options:
 
 Set `imageContainerfile` to build and use a local custom image instead of the
 published GHCR image. Set `imageBuildContext` to an absolute host path string
-when the custom image needs a build context. Bump `nixVersion` or remove the
-local image when the Containerfile or context changes.
+when the custom image needs a build context. Custom images must provide an
+`nc` implementation with `-N` support and a working `/sbin/init`, because
+HexBox boots and proxies the machine through those entrypoints. Bump
+`nixVersion` or remove the local image when the Containerfile or context
+changes.
 
 Available machine options:
 
