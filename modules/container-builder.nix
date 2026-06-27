@@ -159,10 +159,10 @@ let
       /usr/bin/printf '%s\n' \
         'command -v base64 >/dev/null 2>&1 || { echo "base64 is required inside the builder image for HexBox bootstrap" >&2; exit 1; }' \
         'command -v nc >/dev/null 2>&1 || { echo "nc is required inside the builder image for HexBox SSH proxy" >&2; exit 1; }' \
-        'nc_help=$(nc -h 2>&1 || true)' \
-        'case "$nc_help" in' \
-        '  *"-N"*"shutdown"* ) ;;' \
-        '  *) echo "OpenBSD nc with -N support is required inside the builder image for HexBox SSH proxy" >&2; exit 1 ;;' \
+        'nc_probe=$(nc -N -h 2>&1 || true)' \
+        'case "$nc_probe" in' \
+        '  *"invalid option"* | *"illegal option"* | *"unrecognized option"* ) echo "OpenBSD nc with -N support is required inside the builder image for HexBox SSH proxy" >&2; exit 1 ;;' \
+        '  * ) ;;' \
         'esac'
     } | "$container_bin" machine run --root -i -n "$machine_name" /bin/sh -s 2>&1); then
       echo "hexbox: failed to run bootstrap preflight in builder machine $machine_name" >&2
