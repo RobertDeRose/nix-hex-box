@@ -35,7 +35,7 @@ let
   builderImageTag = "${cfg.imageRepository}:${cfg.nixVersion}";
   bootstrapVersion = builtins.hashString "sha256" (
     builtins.toJSON {
-      recipeVersion = "2026-06-15-machine-bootstrap-v3";
+      recipeVersion = "2026-06-26-machine-bootstrap-v4";
       sshUser = cfg.sshUser;
       containerPort = cfg.containerPort;
       idleShutdownEnable = cfg.idleShutdown.enable;
