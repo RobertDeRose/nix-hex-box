@@ -55,6 +55,9 @@ Machine notes:
 - Set `imageContainerfile` to build a local custom image instead of pulling the
   default image. `imageBuildContext` supplies an optional absolute host path to
   the build context; without it, HexBox builds with an empty generated context.
+  Custom images must also provide `nc` with `-N` support, `base64`, `getent`,
+  and a working `/sbin/init`, because HexBox uses them during bootstrap, SSH
+  proxying, and machine boot.
 - `homeMount` defaults to `none` so the builder does not mount the host home
   directory.
 - `idleShutdown.timeoutSeconds` controls the guest watchdog that powers the

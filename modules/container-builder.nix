@@ -788,13 +788,13 @@ in
     imageContainerfile = mkOption {
       type = types.nullOr types.path;
       default = null;
-      description = "Optional custom Containerfile to build locally for the builder machine. When null, HexBox uses the published GHCR image.";
+      description = "Optional custom Containerfile to build locally for the builder machine. Custom images must provide `nc` with `-N` support, `base64`, `getent`, and a working `/sbin/init`. When null, HexBox uses the published GHCR image.";
     };
 
     imageBuildContext = mkOption {
       type = types.nullOr types.str;
       default = null;
-      description = "Optional absolute host path to the build context for `imageContainerfile`. When null, custom images build with an empty generated context.";
+      description = "Optional absolute host path to the build context for `imageContainerfile`. When null, custom images build with an empty generated context but must still provide `nc` with `-N` support, `base64`, `getent`, and a working `/sbin/init`.";
     };
 
     cpus = mkOption {
