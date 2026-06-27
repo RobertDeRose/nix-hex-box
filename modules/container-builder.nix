@@ -161,7 +161,7 @@ let
         'command -v nc >/dev/null 2>&1 || { echo "nc is required inside the builder image for HexBox SSH proxy" >&2; exit 1; }' \
         'nc_help=$(nc -h 2>&1 || true)' \
         'case "$nc_help" in' \
-        '  *" -N"* | *"[-"*N* ) ;;' \
+        '  *"-N"*"shutdown"* ) ;;' \
         '  *) echo "OpenBSD nc with -N support is required inside the builder image for HexBox SSH proxy" >&2; exit 1 ;;' \
         'esac'
     } | "$container_bin" machine run --root -i -n "$machine_name" /bin/sh -s 2>&1); then
