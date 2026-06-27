@@ -358,7 +358,9 @@ builder::test() {
 }
 
 repair_failed() {
-  print_mark info 'Run hb builder reset to recreate the builder machine.'
+  local next_step="${1:-Run hb builder reset to recreate the builder machine.}"
+
+  print_mark info "$next_step"
   exit 1
 }
 
@@ -369,7 +371,7 @@ builder::repair() {
   local readiness_ok=0
 
   if ! doctor_runtime_impl; then
-    repair_failed
+    repair_failed 'Run hb doctor runtime to recover the Apple container runtime.'
   fi
 
   if ! "$start_script"; then

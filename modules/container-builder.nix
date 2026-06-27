@@ -410,7 +410,7 @@ let
         fi
         attempts=$((attempts - 1))
         if [ "$attempts" -gt 0 ]; then
-          "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
+          ${pkgs.coreutils}/bin/timeout 15 "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
           /bin/sleep 2
         fi
       done
