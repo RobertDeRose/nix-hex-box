@@ -406,7 +406,7 @@ builder::repair() {
   fi
 
   if ! probe_common_external_domains; then
-    repair_failed
+    repair_failed 'Check builder network/DNS/proxy access, then rerun hb builder repair.'
   fi
 
   if nix store ping --store "$remote_store" > /dev/null 2>&1; then
