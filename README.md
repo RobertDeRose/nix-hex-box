@@ -189,7 +189,8 @@ hb doctor
 `hb builder repair` ensures the Apple container system is healthy, builds a
 custom local OCI image when configured and missing, creates or updates the
 container machine, verifies SSH, checks outbound connectivity, and pings the
-remote store. If repair fails, run `hb builder reset` to recreate the machine.
+remote store. If repair fails, follow the reported recovery step for the
+runtime, machine, or network failure that was detected.
 After repair succeeds, run `hb builder test` to verify remote build execution.
 
 See `docs/spec.md` for the detailed design notes.

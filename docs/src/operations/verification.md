@@ -38,8 +38,8 @@ retrying the builder startup path. It also verifies:
 - remote store reachability from the host side
 
 After repair succeeds, `hb builder test` runs a timed trivial remote build
-through the builder. If repair fails, run `hb builder reset` to recreate the
-machine.
+through the builder. If repair fails, follow the reported recovery step for the
+runtime, machine, or network failure that was detected.
 
 Other useful helper commands:
 
