@@ -9,11 +9,11 @@ RUN apk add --no-cache \
       findutils \
       gcompat \
       iproute2 \
-      netcat-openbsd \
       openssh-client \
       openssh-server \
       procps \
       shadow \
+      socat \
       sudo \
       tar \
       xz

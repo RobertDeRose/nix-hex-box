@@ -159,13 +159,8 @@ let
     if ! preflight_output=$({
       /usr/bin/printf '%s\n' \
         'command -v base64 >/dev/null 2>&1 || { echo "base64 is required inside the builder image for HexBox bootstrap" >&2; exit 1; }' \
-        'command -v nc >/dev/null 2>&1 || { echo "nc is required inside the builder image for HexBox SSH proxy" >&2; exit 1; }' \
-        '[ -x /sbin/init ] || { echo "/sbin/init is required inside the builder image for HexBox boot" >&2; exit 1; }' \
-        'nc_probe=$(nc -N 127.0.0.1 1 </dev/null 2>&1 || true)' \
-        'case "$nc_probe" in' \
-        '  *"invalid option"* | *"illegal option"* | *"unrecognized option"* ) echo "OpenBSD nc with -N support is required inside the builder image for HexBox SSH proxy" >&2; exit 1 ;;' \
-        '  * ) ;;' \
-        'esac'
+        'command -v socat >/dev/null 2>&1 || { echo "socat is required inside the builder image for HexBox SSH proxy" >&2; exit 1; }' \
+        '[ -x /sbin/init ] || { echo "/sbin/init is required inside the builder image for HexBox boot" >&2; exit 1; }'
     } | "$container_bin" machine run --root -i -n "$machine_name" /bin/sh -s 2>&1); then
       echo "hexbox: failed to run bootstrap preflight in builder machine $machine_name" >&2
       echo "hexbox: container machine run output:" >&2
@@ -568,7 +563,7 @@ let
       ready=0
       attempt=1
       while [ "$attempt" -le 30 ]; do
-        if ${pkgs.coreutils}/bin/timeout 5 "$container_bin" machine run --root -i -n "$machine_name" nc -z 127.0.0.1 "$container_port" </dev/null >/dev/null 2>&1; then
+        if ${pkgs.coreutils}/bin/timeout 5 "$container_bin" machine run --root -i -n "$machine_name" socat - "TCP:127.0.0.1:$container_port,connect-timeout=5" </dev/null >/dev/null 2>&1; then
           ready=1
           break
         fi
@@ -579,7 +574,7 @@ let
         echo "hexbox: builder SSH did not become ready; run 'hb builder repair' and inspect readiness logs" >&2
         exit 1
       fi
-      exec "$container_bin" machine run --root -i -n "$machine_name" nc -N 127.0.0.1 "$container_port"
+      exec "$container_bin" machine run --root -i -n "$machine_name" socat STDIO "TCP:127.0.0.1:$container_port"
     }
 
     if [ "$(/usr/bin/id -un)" = "$owner" ]; then
@@ -790,13 +785,13 @@ in
     imageContainerfile = mkOption {
       type = types.nullOr types.path;
       default = null;
-      description = "Optional custom Containerfile to build locally for the builder machine. Custom images must provide `nc` with `-N` support, `base64`, `getent`, and a working `/sbin/init`. When null, HexBox uses the published GHCR image.";
+      description = "Optional custom Containerfile to build locally for the builder machine. Custom images must provide `socat`, `base64`, `getent`, and a working `/sbin/init`. When null, HexBox uses the published GHCR image.";
     };
 
     imageBuildContext = mkOption {
       type = types.nullOr types.str;
       default = null;
-      description = "Optional absolute host path to the build context for `imageContainerfile`. When null, custom images build with an empty generated context but must still provide `nc` with `-N` support, `base64`, `getent`, and a working `/sbin/init`.";
+      description = "Optional absolute host path to the build context for `imageContainerfile`. When null, custom images build with an empty generated context but must still provide `socat`, `base64`, `getent`, and a working `/sbin/init`.";
     };
 
     cpus = mkOption {
@@ -963,10 +958,7 @@ in
       }
     ];
 
-    environment.systemPackages = [
-      pkgs.netcat
-    ]
-    ++ optional cfg.cli.completions.enable completionPackage;
+    environment.systemPackages = optional cfg.cli.completions.enable completionPackage;
 
     environment.variables = mkIf (cfg.socktainer.enable && cfg.socktainer.setDockerHost) {
       DOCKER_HOST = "unix://${socktainerSocketPath}";

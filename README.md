@@ -99,11 +99,10 @@ publishes the versioned release tag `alpine-3.22-lix-2.95.2-1` for users who
 prefer to pin.
 
 The builder uses `ssh-ng`. The host SSH path is a generated `ProxyCommand` that
-runs Apple `container machine run --root -i ... nc -N 127.0.0.1 <containerPort>`,
+runs Apple `container machine run --root -i ... socat STDIO TCP:127.0.0.1:<containerPort>`,
 so the machine starts on demand, IP changes do not affect Nix, and the relay
 closes cleanly when SSH finishes. Custom `imageContainerfile` images must
-include an `nc` implementation that supports `-N`, or builder bootstrap will
-fail the SSH proxy preflight.
+include `socat`, or builder bootstrap will fail the SSH proxy preflight.
 
 The guest `/nix` store lives in the machine's persistent storage. Stop/start
 keeps build outputs and downloaded substitutes. `hb builder reset` deletes and
@@ -118,11 +117,11 @@ Available image options:
 
 Set `imageContainerfile` to build and use a local custom image instead of the
 published GHCR image. Set `imageBuildContext` to an absolute host path string
-when the custom image needs a build context. Custom images must provide an
-`nc` implementation with `-N` support, `base64`, `getent`, and a working
-`/sbin/init`, because HexBox bootstrap, machine boot, and the SSH proxy all use
-those entrypoints. Bump `nixVersion` or remove the local image when the
-Containerfile or context changes.
+when the custom image needs a build context. Custom images must provide
+`socat`, `base64`, `getent`, and a working `/sbin/init`, because HexBox
+bootstrap, machine boot, and the SSH proxy all use those entrypoints. Bump
+`nixVersion` or remove the local image when the Containerfile or context
+changes.
 
 Available machine options:
 

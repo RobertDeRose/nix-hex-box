@@ -554,7 +554,7 @@ probe_container_tcp_target() {
   local host="$1"
   local port="$2"
 
-  "$container_bin" machine run --root -i -n "$container_name" nc -zvw5 "$host" "$port" < /dev/null > /dev/null 2>&1
+  "$container_bin" machine run --root -i -n "$container_name" socat - "TCP:$host:$port,connect-timeout=5" < /dev/null > /dev/null 2>&1
 }
 
 # @cmd Check and recover Apple container runtime

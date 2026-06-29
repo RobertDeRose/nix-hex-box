@@ -12,8 +12,8 @@ That proxy:
 - sudoes back to the configured runtime-owning macOS user when invoked by root
 - starts the Apple container system if needed
 - creates or updates the builder machine when needed
-- runs `container machine run --root -i -n <machine> nc -N 127.0.0.1 <ssh-port>`
-- relays SSH directly into guest `sshd` and half-closes the relay when SSH exits
+- runs `container machine run --root -i -n <machine> socat STDIO TCP:127.0.0.1:<ssh-port>`
+- relays SSH directly into guest `sshd` and closes the relay when SSH exits
 
 Because the SSH connection enters through `container machine run`, the host does
 not need to know the machine's current IP address. A stopped machine is booted on
