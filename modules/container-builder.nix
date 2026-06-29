@@ -438,6 +438,18 @@ let
         rm_status=0
       fi
       if [ "$rm_status" -ne 0 ]; then
+        echo "hexbox: container machine rm did not complete; restarting Apple container services and retrying" >&2
+        ${pkgs.coreutils}/bin/timeout 60 "$container_bin" system stop >/dev/null 2>&1 || true
+        "$container_bin" system start >/dev/null
+        set +e
+        rm_output=$(${pkgs.coreutils}/bin/timeout 60 "$container_bin" machine rm "$machine_name" 2>&1)
+        rm_status=$?
+        set -e
+        if [ "$rm_status" -ne 0 ] && ! "$container_bin" machine inspect "$machine_name" >/dev/null 2>&1; then
+          rm_status=0
+        fi
+      fi
+      if [ "$rm_status" -ne 0 ]; then
         echo "hexbox: failed to remove builder machine $machine_name" >&2
         printf '%s\n' "$rm_output" >&2
         exit 1
