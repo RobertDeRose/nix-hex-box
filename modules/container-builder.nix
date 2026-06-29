@@ -161,7 +161,7 @@ let
         'command -v base64 >/dev/null 2>&1 || { echo "base64 is required inside the builder image for HexBox bootstrap" >&2; exit 1; }' \
         'command -v nc >/dev/null 2>&1 || { echo "nc is required inside the builder image for HexBox SSH proxy" >&2; exit 1; }' \
         '[ -x /sbin/init ] || { echo "/sbin/init is required inside the builder image for HexBox boot" >&2; exit 1; }' \
-        'nc_probe=$(nc -N -h 2>&1 || true)' \
+        'nc_probe=$(nc -N 127.0.0.1 1 </dev/null 2>&1 || true)' \
         'case "$nc_probe" in' \
         '  *"invalid option"* | *"illegal option"* | *"unrecognized option"* ) echo "OpenBSD nc with -N support is required inside the builder image for HexBox SSH proxy" >&2; exit 1 ;;' \
         '  * ) ;;' \
