@@ -4,7 +4,7 @@
 
 - published Alpine/Lix-based builder image in this repository's GHCR package
 - optional local custom image builds from `imageContainerfile`
-- persistent Apple `container machine` instead of generation-aware ordinary containers
+- persistent Apple `container machine` with generation-aware recreation for image-contract changes
 - on-demand startup through SSH `ProxyCommand`
 - no localhost bridge or published SSH port in the default builder path
 - guest-side `builder` user with narrow passwordless sudo for the remote `nix-daemon`

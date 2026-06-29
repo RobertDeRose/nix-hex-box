@@ -50,11 +50,14 @@ Machine notes:
 - The default image is published by this repository as
   `ghcr.io/robertderose/nix-hex-box/hexbox-builder:latest`.
 - Scheduled builds refresh `latest`; image-definition changes also publish
-  `alpine-3.22-lix-2.95.2-1` for pinned use. Builder image publishing is
+  `alpine-3.22-lix-2.95.2-2` for pinned use. Builder image publishing is
   skipped until the configured Lix tag is at least seven days old.
 - Set `imageContainerfile` to build a local custom image instead of pulling the
   default image. `imageBuildContext` supplies an optional absolute host path to
   the build context; without it, HexBox builds with an empty generated context.
+  Custom images must also provide `socat`, `base64`, `getent`, and a working
+  `/sbin/init`, because HexBox uses them during bootstrap, SSH proxying, and
+  machine boot.
 - `homeMount` defaults to `none` so the builder does not mount the host home
   directory.
 - `idleShutdown.timeoutSeconds` controls the guest watchdog that powers the

@@ -39,12 +39,14 @@ ghcr.io/robertderose/nix-hex-box/hexbox-builder:latest
 Scheduled builds refresh `latest` for Alpine package updates, such as OpenSSH
 fixes. Builder image publishing is skipped until the configured Lix tag is at
 least seven days old. Image-definition changes on `main` also publish the
-versioned tag `alpine-3.22-lix-2.95.2-1` for users who prefer a pinned image.
+versioned tag `alpine-3.22-lix-2.95.2-2` for users who prefer a pinned image.
 
 The image contains Alpine 3.22, OpenSSH, sudo, and Lix. Set
 `imageContainerfile` to build a local custom image instead. Set
 `imageBuildContext` to an absolute host path string when the custom image needs
-a build context. Runtime bootstrap writes a minimal `nix.conf` that uses
+a build context. Custom images must provide `socat`, `base64`, `getent`, and a
+working `/sbin/init`, because HexBox uses them for bootstrap, the SSH proxy, and
+the machine boot path. Runtime bootstrap writes a minimal `nix.conf` that uses
 `https://cache.nixos.org/` by default.
 
 Current default behavior to keep in mind:

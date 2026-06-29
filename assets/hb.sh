@@ -209,6 +209,10 @@ builder::status() {
   print_state_row 'builder machine' "$machine_kind" "$machine_text"
   print_state_row 'ssh handshake' "$ssh_kind" "$ssh_text"
   print_state_row 'remote store' "$remote_kind" "$remote_text"
+
+  if [ "$system_kind" != ok ] || [ "$machine_kind" != ok ] || [ "$ssh_kind" != ok ] || [ "$remote_kind" != ok ]; then
+    print_mark info 'Run hb builder repair to recover the builder.'
+  fi
 }
 
 show_logs() {
@@ -275,11 +279,11 @@ builder::logs() {
   show_logs "$argc_target" "${argc_follow:-0}" "$lines"
 }
 
-# @cmd Run a simple remote build smoke test through the builder
-builder::test() {
-  hb_init
+run_remote_build_smoke() {
   local expr
   local output_path
+  local smoke_timeout_seconds=60
+  local status
   local -a build_args
 
   expr='
@@ -291,7 +295,6 @@ builder::test() {
     }
   '
 
-  builder::repair
   print_heading '🧪' 'Remote build smoke test (trivial aarch64-linux derivation)'
 
   output_path=$(nix eval --raw --impure --expr "(${expr}).outPath")
@@ -309,7 +312,56 @@ builder::test() {
     build_args+=(--rebuild)
   fi
 
-  exec nix "${build_args[@]}"
+  set +e
+  /usr/bin/perl -e '
+    my $timeout = shift @ARGV;
+    my $pid = fork();
+    die "failed to fork: $!\n" unless defined $pid;
+    if ($pid == 0) {
+      setpgrp(0, 0);
+      exec @ARGV or die "failed to exec @ARGV: $!\n";
+    }
+    sub terminate_child {
+      my ($signal, $exit_status) = @_;
+      kill $signal, -$pid;
+      select undef, undef, undef, 1;
+      kill "KILL", -$pid;
+      waitpid($pid, 0);
+      exit $exit_status;
+    }
+    local $SIG{ALRM} = sub { terminate_child("TERM", 124) };
+    local $SIG{INT} = sub { terminate_child("INT", 130) };
+    local $SIG{TERM} = sub { terminate_child("TERM", 143) };
+    local $SIG{HUP} = sub { terminate_child("HUP", 129) };
+    alarm $timeout;
+    waitpid($pid, 0);
+    my $status = $?;
+    alarm 0;
+    exit 128 + ($status & 127) if $status & 127;
+    exit $status >> 8;
+  ' "$smoke_timeout_seconds" nix "${build_args[@]}"
+  status=$?
+  set -e
+
+  if [ "$status" -eq 124 ]; then
+    print_error "Remote build smoke test timed out after ${smoke_timeout_seconds}s"
+    return 124
+  fi
+
+  return "$status"
+}
+
+# @cmd Run a simple remote build smoke test through the builder
+builder::test() {
+  hb_init
+  run_remote_build_smoke
+}
+
+repair_failed() {
+  local next_step="${1:-Run hb builder reset to recreate the builder machine.}"
+
+  print_mark info "$next_step"
+  exit 1
 }
 
 # @cmd Verify builder health and recover runtime if needed
@@ -319,16 +371,18 @@ builder::repair() {
   local readiness_ok=0
 
   if ! doctor_runtime_impl; then
-    exit 1
+    repair_failed 'Run hb doctor runtime to recover the Apple container runtime.'
   fi
 
-  "$start_script"
+  if ! "$start_script"; then
+    repair_failed
+  fi
 
   if status_container | /usr/bin/grep -q '"status"[[:space:]]*:[[:space:]]*"running"'; then
     print_mark ok 'Builder machine running'
   else
     print_mark fail 'Builder machine not running'
-    exit 1
+    repair_failed
   fi
 
   while [ "$readiness_attempt" -le 3 ]; do
@@ -348,19 +402,21 @@ builder::repair() {
     print_mark ok 'SSH handshake succeeded'
   else
     print_mark fail 'SSH handshake failed'
-    exit 1
+    repair_failed
   fi
 
   if ! probe_common_external_domains; then
-    exit 1
+    repair_failed 'Check builder network/DNS/proxy access, then rerun hb builder repair.'
   fi
 
   if nix store ping --store "$remote_store" > /dev/null 2>&1; then
     print_mark ok 'Host can reach remote store'
   else
     print_mark fail 'Host cannot reach remote store'
-    exit 1
+    repair_failed
   fi
+
+  print_mark info 'Run hb builder test to verify remote builds.'
 }
 
 # @cmd Destroy and recreate the builder machine
@@ -498,7 +554,7 @@ probe_container_tcp_target() {
   local host="$1"
   local port="$2"
 
-  "$container_bin" machine run --root -i -n "$container_name" nc -zvw5 "$host" "$port" < /dev/null > /dev/null 2>&1
+  "$container_bin" machine run --root -i -n "$container_name" socat - "TCP:$host:$port,connect-timeout=5" < /dev/null > /dev/null 2>&1
 }
 
 # @cmd Check and recover Apple container runtime

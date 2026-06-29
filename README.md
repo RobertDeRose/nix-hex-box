@@ -91,16 +91,19 @@ host-specific SSH keys, `nix.conf`, sudoers rule, and idle timeout.
 
 GitHub Actions rebuilds and publishes `latest` on the same weekly schedule as
 the runtime-version updater so Alpine package updates, such as OpenSSH fixes,
-are available to new or recreated machines. Existing machines keep their current
-base image until explicitly recreated, for example with `hb builder reset`.
+are available to new or recreated machines. When the configured machine image
+contract changes, HexBox recreates the builder machine automatically; this also
+deletes the guest-local store.
 Builder image publishing is skipped until the configured Lix tag is at least
 seven days old. When the image definition changes on `main`, the workflow also
-publishes the versioned release tag `alpine-3.22-lix-2.95.2-1` for users who
+publishes the versioned release tag `alpine-3.22-lix-2.95.2-2` for users who
 prefer to pin.
 
 The builder uses `ssh-ng`. The host SSH path is a generated `ProxyCommand` that
-runs Apple `container machine run --root -i ... nc 127.0.0.1 <containerPort>`,
-so the machine starts on demand and IP changes do not affect the Nix builder config.
+runs Apple `container machine run --root -i ... socat STDIO TCP:127.0.0.1:<containerPort>`,
+so the machine starts on demand, IP changes do not affect Nix, and the relay
+closes cleanly when SSH finishes. Custom `imageContainerfile` images must
+include `socat`, or builder bootstrap will fail the SSH proxy preflight.
 
 The guest `/nix` store lives in the machine's persistent storage. Stop/start
 keeps build outputs and downloaded substitutes. `hb builder reset` deletes and
@@ -115,8 +118,11 @@ Available image options:
 
 Set `imageContainerfile` to build and use a local custom image instead of the
 published GHCR image. Set `imageBuildContext` to an absolute host path string
-when the custom image needs a build context. Bump `nixVersion` or remove the
-local image when the Containerfile or context changes.
+when the custom image needs a build context. Custom images must provide
+`socat`, `base64`, `getent`, and a working `/sbin/init`, because HexBox
+bootstrap, machine boot, and the SSH proxy all use those entrypoints. Bump
+`nixVersion` or remove the local image when the Containerfile or context
+changes.
 
 Available machine options:
 
@@ -186,6 +192,8 @@ hb doctor
 `hb builder repair` ensures the Apple container system is healthy, builds a
 custom local OCI image when configured and missing, creates or updates the
 container machine, verifies SSH, checks outbound connectivity, and pings the
-remote store.
+remote store. If repair fails, follow the reported recovery step for the
+runtime, machine, or network failure that was detected.
+After repair succeeds, run `hb builder test` to verify remote build execution.
 
 See `docs/spec.md` for the detailed design notes.
