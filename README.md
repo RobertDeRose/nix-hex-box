@@ -91,8 +91,9 @@ host-specific SSH keys, `nix.conf`, sudoers rule, and idle timeout.
 
 GitHub Actions rebuilds and publishes `latest` on the same weekly schedule as
 the runtime-version updater so Alpine package updates, such as OpenSSH fixes,
-are available to new or recreated machines. Existing machines keep their current
-base image until explicitly recreated, for example with `hb builder reset`.
+are available to new or recreated machines. When the configured machine image
+contract changes, HexBox recreates the builder machine automatically; this also
+deletes the guest-local store.
 Builder image publishing is skipped until the configured Lix tag is at least
 seven days old. When the image definition changes on `main`, the workflow also
 publishes the versioned release tag `alpine-3.22-lix-2.95.2-2` for users who

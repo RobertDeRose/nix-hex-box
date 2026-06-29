@@ -43,6 +43,15 @@ let
       hostAlias = cfg.hostAlias;
     }
   );
+  machineGeneration = builtins.hashString "sha256" (
+    builtins.toJSON {
+      recipeVersion = "2026-06-29-socat-proxy-v1";
+      image = builderImageTag;
+      imageContainerfile =
+        if cfg.imageContainerfile == null then null else toString cfg.imageContainerfile;
+      imageBuildContext = cfg.imageBuildContext;
+    }
+  );
   hasCustomImageContainerfile = cfg.imageContainerfile != null;
   customImageBuildContext =
     if cfg.imageBuildContext != null then cfg.imageBuildContext else "${workDir}/builder-image/context";
@@ -347,6 +356,8 @@ let
     image_tag=${escapeShellArg builderImageTag}
     bootstrap_machine=${escapeShellArg machineBootstrapScript}
     bootstrap_version=${escapeShellArg bootstrapVersion}
+    machine_generation=${escapeShellArg machineGeneration}
+    machine_generation_file=${escapeShellArg "${workDir}/machine-generation"}
     workdir=${escapeShellArg workDir}
     /bin/mkdir -p "$workdir"
     cd "$workdir"
@@ -416,6 +427,22 @@ let
       printf '%s\n' "$boot_output" >&2
       exit 1
     }
+
+    remove_machine() {
+      ${pkgs.coreutils}/bin/timeout 30 "$container_bin" machine stop "$machine_name" >/dev/null 2>&1 || true
+      set +e
+      rm_output=$(${pkgs.coreutils}/bin/timeout 60 "$container_bin" machine rm "$machine_name" 2>&1)
+      rm_status=$?
+      set -e
+      if [ "$rm_status" -ne 0 ] && ! "$container_bin" machine inspect "$machine_name" >/dev/null 2>&1; then
+        rm_status=0
+      fi
+      if [ "$rm_status" -ne 0 ]; then
+        echo "hexbox: failed to remove builder machine $machine_name" >&2
+        printf '%s\n' "$rm_output" >&2
+        exit 1
+      fi
+    }
     ${optionalString hasCustomImageContainerfile ''
       image_containerfile=${escapeShellArg "${workDir}/builder-image/Containerfile"}
       image_context=${escapeShellArg customImageBuildContext}
@@ -434,6 +461,15 @@ let
         "$container_bin" build --pull --progress plain -f "$image_containerfile" -t "$image_tag" "$image_context"
       fi
     ''}
+
+    if "$container_bin" machine inspect "$machine_name" >/dev/null 2>&1; then
+      current_machine_generation=$(/bin/cat "$machine_generation_file" 2>/dev/null || true)
+      if [ "$current_machine_generation" != "$machine_generation" ]; then
+        echo "hexbox: builder machine generation changed; recreating $machine_name" >&2
+        echo "hexbox: guest-local /nix store contents for $machine_name will be deleted" >&2
+        remove_machine
+      fi
+    fi
 
     if ! "$container_bin" machine inspect "$machine_name" >/dev/null 2>&1; then
       echo "creating HexBox container machine $machine_name" >&2
@@ -482,6 +518,7 @@ let
       "$bootstrap_machine"
       stop_machine
       boot_machine
+      printf '%s\n' "$machine_generation" > "$machine_generation_file"
     else
       "$container_bin" machine set -n "$machine_name" \
         cpus=${escapeShellArg (toString cfg.cpus)} \

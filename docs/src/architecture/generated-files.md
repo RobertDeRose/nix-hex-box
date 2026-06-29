@@ -15,6 +15,7 @@ Important files include:
 - `ssh_config`
 - `ssh_config_root`
 - `known_hosts`
+- `machine-generation`
 - `hexbox-readiness.log`
 - `hb`
 
@@ -27,6 +28,11 @@ Containerfile here and `hb builder repair` / `start-container.sh` build the
 custom image locally when its tag is missing. If `imageBuildContext` is set, it
 must be an absolute host path string and is passed directly to Apple
 `container build`.
+
+`machine-generation` records the image contract used to create the current
+Apple container machine. If it differs from the active Nix configuration,
+`start-container.sh` recreates the machine, deleting the guest-local `/nix`
+store.
 
 The repository copy of `assets/hb.sh` is also generated. Edit `scripts/hb.sh`
 and regenerate `assets/hb.sh` instead of changing the built helper directly.
