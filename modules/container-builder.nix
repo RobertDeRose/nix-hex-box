@@ -101,7 +101,8 @@ let
     fi
   '';
 
-  idleWatchdogScript = pkgs.writeShellScript "hexbox-idle-watchdog" ''
+  idleWatchdogScript = pkgs.writeText "hexbox-idle-watchdog" ''
+    #!/bin/sh
     set -eu
     ssh_port=${escapeShellArg (toString cfg.containerPort)}
     timeout_seconds=300
