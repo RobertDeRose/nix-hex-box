@@ -95,7 +95,7 @@ are available to new or recreated machines. Existing machines keep their current
 base image until explicitly recreated, for example with `hb builder reset`.
 Builder image publishing is skipped until the configured Lix tag is at least
 seven days old. When the image definition changes on `main`, the workflow also
-publishes the versioned release tag `alpine-3.22-lix-2.95.2-1` for users who
+publishes the versioned release tag `alpine-3.22-lix-2.95.2-2` for users who
 prefer to pin.
 
 The builder uses `ssh-ng`. The host SSH path is a generated `ProxyCommand` that

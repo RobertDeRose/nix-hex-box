@@ -21,7 +21,7 @@ package as
 
 Scheduled builds refresh `latest` for Alpine package updates. Image-definition
 changes on `main` also publish the versioned tag
-`alpine-3.22-lix-2.95.2-1`.
+`alpine-3.22-lix-2.95.2-2`.
 
 Users can set `services.container-builder.imageContainerfile` to build a local
 custom image instead.
