@@ -484,6 +484,10 @@ let
     fi
 
     if ! "$container_bin" machine inspect "$machine_name" >/dev/null 2>&1; then
+      ${optionalString (!hasCustomImageContainerfile) ''
+        echo "pulling HexBox machine image $image_tag" >&2
+        "$container_bin" image pull "$image_tag"
+      ''}
       echo "creating HexBox container machine $machine_name" >&2
       set +e
       create_output=$(${pkgs.coreutils}/bin/timeout 60 "$container_bin" machine create "$image_tag" \
