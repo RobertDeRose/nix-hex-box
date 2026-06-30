@@ -490,7 +490,7 @@ let
       ''}
       echo "creating HexBox container machine $machine_name" >&2
       set +e
-      create_output=$(${pkgs.coreutils}/bin/timeout 60 "$container_bin" machine create "$image_tag" \
+      create_output=$(${pkgs.coreutils}/bin/timeout 300 "$container_bin" machine create "$image_tag" \
         --name "$machine_name" \
         --cpus ${escapeShellArg (toString cfg.cpus)} \
         --memory ${escapeShellArg cfg.memory} \
@@ -511,7 +511,7 @@ let
             ${pkgs.coreutils}/bin/timeout 60 "$container_bin" machine rm "$machine_name" >/dev/null 2>&1 || true
           fi
           set +e
-          create_output=$(${pkgs.coreutils}/bin/timeout 60 "$container_bin" machine create "$image_tag" \
+          create_output=$(${pkgs.coreutils}/bin/timeout 300 "$container_bin" machine create "$image_tag" \
             --name "$machine_name" \
             --cpus ${escapeShellArg (toString cfg.cpus)} \
             --memory ${escapeShellArg cfg.memory} \
