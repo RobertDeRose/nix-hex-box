@@ -44,6 +44,8 @@ custom image instead.
 - The guest SSH user is `builder`.
 - The remote `nix-daemon` is reached through a narrow passwordless sudo wrapper
   inside the guest.
+- Boot-time guest preparation provisions the standard `nixbld` build users and
+  makes `/dev/net/tun` available to Lix sandbox networking.
 - When idle shutdown is enabled, a guest watchdog watches active SSH
   connections and stops `sshd` after the configured timeout, which powers the machine off.
 

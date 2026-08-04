@@ -143,7 +143,9 @@ Available host/container integration options:
 - `services.container-builder.socktainer.installer.version`
 
 The builder machine writes a minimal `nix.conf` with
-`https://cache.nixos.org/` configured as a substituter.
+`https://cache.nixos.org/` configured as a substituter. Bootstrap provisions the
+standard `nixbld` group and build users, then prepares `/dev/net/tun` on every
+boot so Lix sandbox networking can start `pasta` reliably.
 
 Example:
 

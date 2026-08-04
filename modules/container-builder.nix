@@ -35,7 +35,7 @@ let
   builderImageTag = "${cfg.imageRepository}:${cfg.nixVersion}";
   bootstrapVersion = builtins.hashString "sha256" (
     builtins.toJSON {
-      recipeVersion = "2026-06-26-machine-bootstrap-v4";
+      recipeVersion = "2026-08-04-machine-bootstrap-v5";
       sshUser = cfg.sshUser;
       containerPort = cfg.containerPort;
       idleShutdownEnable = cfg.idleShutdown.enable;
@@ -149,6 +149,53 @@ let
     done
   '';
 
+  runtimePrepareScript = pkgs.writeText "hexbox-prepare-runtime" ''
+    #!/bin/sh
+    set -eu
+
+    build_group=nixbld
+    if ! getent group "$build_group" >/dev/null 2>&1; then
+      if command -v groupadd >/dev/null 2>&1; then
+        groupadd --system --gid 30000 "$build_group" 2>/dev/null || groupadd --system "$build_group"
+      elif command -v addgroup >/dev/null 2>&1; then
+        addgroup -S -g 30000 "$build_group" 2>/dev/null || addgroup -S "$build_group"
+      else
+        echo "hexbox: neither groupadd nor addgroup is available" >&2
+        exit 1
+      fi
+    fi
+
+    index=1
+    while [ "$index" -le 32 ]; do
+      build_user="$build_group$index"
+      if ! id -u "$build_user" >/dev/null 2>&1; then
+        if command -v useradd >/dev/null 2>&1; then
+          useradd --system --no-create-home --shell /sbin/nologin --gid "$build_group" "$build_user"
+        elif command -v adduser >/dev/null 2>&1; then
+          adduser -S -D -H -s /sbin/nologin -G "$build_group" "$build_user"
+        else
+          echo "hexbox: neither useradd nor adduser is available" >&2
+          exit 1
+        fi
+      fi
+      index=$((index + 1))
+    done
+
+    mkdir -p /dev/net
+    if [ ! -e /dev/net/tun ] && command -v mknod >/dev/null 2>&1; then
+      mknod /dev/net/tun c 10 200 2>/dev/null || true
+    fi
+    if [ -e /dev/net/tun ]; then
+      if chgrp "$build_group" /dev/net/tun 2>/dev/null; then
+        chmod 0660 /dev/net/tun
+      else
+        chmod 0666 /dev/net/tun
+      fi
+    else
+      echo "hexbox: /dev/net/tun is unavailable; sandboxed builds may not have networking" >&2
+    fi
+  '';
+
   machineBootstrapScript = pkgs.writeShellScript "hexbox-bootstrap-machine" ''
     set -euo pipefail
 
@@ -180,6 +227,7 @@ let
     auth_key_b64=$(/usr/bin/base64 < "$workdir/builder_ed25519.pub" | /usr/bin/tr -d '\n')
     host_key_pub_b64=$(/usr/bin/base64 < "$workdir/ssh_host_ed25519_key.pub" | /usr/bin/tr -d '\n')
     watchdog_b64=$(/usr/bin/base64 < ${escapeShellArg idleWatchdogScript} | /usr/bin/tr -d '\n')
+    runtime_prepare_b64=$(/usr/bin/base64 < ${escapeShellArg runtimePrepareScript} | /usr/bin/tr -d '\n')
     if ! host_key_output=$({
       /bin/cat <<'HOST_KEY_TRANSFER'
     set -eu
@@ -195,13 +243,14 @@ let
       exit 1
     fi
 
-    if ! bootstrap_output=$("$container_bin" machine run --root -i -n "$machine_name" /bin/sh -s "$auth_key_b64" "$host_key_pub_b64" "$watchdog_b64" "$timeout_seconds" "$idle_enable" <<'EOF'
+    if ! bootstrap_output=$("$container_bin" machine run --root -i -n "$machine_name" /bin/sh -s "$auth_key_b64" "$host_key_pub_b64" "$watchdog_b64" "$timeout_seconds" "$idle_enable" "$runtime_prepare_b64" <<'EOF'
     set -eu
     auth_key_b64=$1
     host_key_pub_b64=$2
     watchdog_b64=$3
     timeout_seconds=$4
     idle_enable=$5
+    runtime_prepare_b64=$6
 
     ssh_user=${escapeShellArg cfg.sshUser}
     ssh_shell=/bin/bash
@@ -264,7 +313,7 @@ let
     cat > /nix/var/hexbox/nix.conf <<'NIXCONF'
     trusted-users = root ${cfg.sshUser}
     experimental-features = nix-command flakes
-    build-users-group =
+    build-users-group = nixbld
     substituters = https://cache.nixos.org/
     trusted-substituters = https://cache.nixos.org/
     trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
@@ -300,6 +349,20 @@ let
     printf '%s' "$watchdog_b64" | base64 -d > /nix/var/hexbox/hexbox-idle-watchdog
     cp /nix/var/hexbox/hexbox-idle-watchdog /usr/local/bin/hexbox-idle-watchdog
     chmod 0755 /nix/var/hexbox/hexbox-idle-watchdog /usr/local/bin/hexbox-idle-watchdog
+
+    printf '%s' "$runtime_prepare_b64" | base64 -d > /usr/local/bin/hexbox-prepare-runtime
+    chmod 0755 /usr/local/bin/hexbox-prepare-runtime
+    if [ ! -e /nix/var/hexbox/image-init ]; then
+      cp /sbin/init /nix/var/hexbox/image-init
+      chmod 0755 /nix/var/hexbox/image-init
+    fi
+    /bin/printf '%s\n' \
+      '#!/bin/sh' \
+      'set -eu' \
+      '/usr/local/bin/hexbox-prepare-runtime' \
+      'exec /nix/var/hexbox/image-init "$@"' \
+      > /sbin/init
+    chmod 0755 /sbin/init
 
     printf '%s\n' "$timeout_seconds" > /nix/var/hexbox/idle-timeout-seconds
     printf '%s\n' "$idle_enable" > /nix/var/hexbox/idle-enable

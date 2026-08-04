@@ -33,6 +33,19 @@ reachability to `cache.nixos.org`. If substitute downloads fail, check:
 - upstream cache availability
 - host networking state
 
+## Sandboxed builds cannot start `pasta`
+
+If a remote build reports a sandbox-network setup failure or `pasta` cannot
+open `/dev/net/tun`, run `hb builder repair` so the guest bootstrap is applied.
+The boot-time preparation provisions the standard `nixbld` build users and
+restores the tunnel device group and mode before starting the Nix daemon. Check
+that state from `hb builder ssh` with:
+
+```bash
+getent group nixbld
+stat -c '%a %U:%G' /dev/net/tun
+```
+
 ## The machine changed IP address
 
 This is expected after stop/start. The Nix builder path does not use the machine

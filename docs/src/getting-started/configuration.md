@@ -47,7 +47,8 @@ The image contains Alpine 3.22, OpenSSH, sudo, and Lix. Set
 a build context. Custom images must provide `socat`, `base64`, `getent`, and a
 working `/sbin/init`, because HexBox uses them for bootstrap, the SSH proxy, and
 the machine boot path. Runtime bootstrap writes a minimal `nix.conf` that uses
-`https://cache.nixos.org/` by default.
+`https://cache.nixos.org/` by default, provisions the `nixbld` build users, and
+prepares `/dev/net/tun` for Lix sandbox networking.
 
 Current default behavior to keep in mind:
 

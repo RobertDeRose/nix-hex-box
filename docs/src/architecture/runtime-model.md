@@ -16,6 +16,7 @@ The current runtime model is:
 - the same SSH path is usable by the root `nix-daemon`; it sudoes back to the runtime-owning macOS user before invoking Apple `container`
 - the guest SSH user is `builder`
 - the remote `nix-daemon` runs through a narrow passwordless sudo wrapper inside the guest
+- boot-time preparation provisions the `nixbld` build users and makes `/dev/net/tun` available to sandboxed builds
 - idle shutdown runs inside the guest and powers off the machine after the configured inactivity timeout
 - Socktainer, when enabled, runs as a separate user launch agent and exposes a Docker-compatible Unix socket under `$HOME/.socktainer`
 
