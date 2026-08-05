@@ -15,7 +15,6 @@ shellcheck = "latest"
 shfmt = "latest"
 tombi = "latest"
 typos = "latest"
-"nix:nixfmt" = "1.2.0"
 "npm:@commitlint/cli" = "20.5.3"
 "npm:semantic-release" = "25.0.3"
 "npm:conventional-changelog-conventionalcommits" = "9.3.1"
@@ -23,6 +22,7 @@ typos = "latest"
 "npm:@semantic-release/github" = "12.0.6"
 "npm:@semantic-release/release-notes-generator" = "14.1.0"
 "pipx:commitizen" = "latest"
+"aqua:Mic92/nixfmt-rs" = "latest"
 
 [env]
 HK_MISE = 1
