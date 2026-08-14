@@ -11,6 +11,10 @@ The current runtime model is:
 - the builder is an Apple `container machine`, not an ordinary ephemeral container
 - activation rewrites helper scripts and SSH config
 - by default, the machine is created from the published HexBox GHCR image
+- machine creation uses Apple Container's normal boot path for first-time user
+  setup, then proves liveness with a bounded `machine run ... true` probe
+- failed run probes are treated as stale machine state and retried after stopping
+  the machine rather than trusting `machine inspect` alone
 - custom `imageContainerfile` configurations build a local OCI image when the tag is missing
 - the SSH path uses `ProxyCommand` to auto-start the machine on demand
 - the same SSH path is usable by the root `nix-daemon`; it sudoes back to the runtime-owning macOS user before invoking Apple `container`

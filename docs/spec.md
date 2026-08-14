@@ -31,6 +31,9 @@ custom image instead.
 - Durable host state lives under `/Users/<username>/.local/state/hb`.
 - The builder is a persistent Apple `container machine` named by
   `services.container-builder.containerName`.
+- Machine creation uses Apple's normal boot path for first-time user setup;
+  startup then proves liveness with a bounded `container machine run ... true`
+  probe and retries stale machine state after stopping it.
 - The guest `/nix` store lives in the machine's persistent storage and survives
   stop/start cycles.
 - `hb builder reset` removes and recreates the machine, which deletes guest-local

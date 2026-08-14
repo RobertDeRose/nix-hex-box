@@ -36,3 +36,5 @@ jobs:
           mise install hk actionlint hadolint pkl shellcheck shfmt tombi typos nix:nixfmt
       - name: Run hk across entire repo
         run: hk check -a
+      - name: Test container machine lifecycle helpers
+        run: bash tests/container-machine-lifecycle.sh

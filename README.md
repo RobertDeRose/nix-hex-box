@@ -105,9 +105,12 @@ so the machine starts on demand, IP changes do not affect Nix, and the relay
 closes cleanly when SSH finishes. Custom `imageContainerfile` images must
 include `socat`, or builder bootstrap will fail the SSH proxy preflight.
 
-The guest `/nix` store lives in the machine's persistent storage. Stop/start
-keeps build outputs and downloaded substitutes. `hb builder reset` deletes and
-recreates the machine, which also deletes the guest-local store.
+The guest `/nix` store lives in the machine's persistent storage. Startup uses
+Apple Container's normal machine-create boot path for first-time user setup, then
+uses a bounded `machine run ... true` probe so stale machine state is retried
+instead of trusted from status alone. Stop/start keeps build outputs and downloaded
+substitutes. `hb builder reset` deletes and recreates the machine, which also
+removes the guest-local store.
 
 Available image options:
 

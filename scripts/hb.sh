@@ -15,6 +15,7 @@ hb_init() {
   host_alias=${HB_HOST_ALIAS:?}
   ssh_config=${HB_SSH_CONFIG:?}
   container_bin=${HB_CONTAINER_BIN:?}
+  container_timeout=${HB_CONTAINER_TIMEOUT:?}
   container_name=${HB_CONTAINER_NAME:?}
   reconcile_host_container_internal=${HB_RECONCILE_HOST_CONTAINER_INTERNAL:?}
   socktainer_enabled=${HB_SOCKTAINER_ENABLED:?}
@@ -83,7 +84,7 @@ print_state_row() {
 }
 
 recover_container_system() {
-  "$container_bin" system start --enable-kernel-install
+  "$container_timeout" 60 "$container_bin" system start --enable-kernel-install
 }
 
 doctor_runtime_impl() {
@@ -103,11 +104,11 @@ doctor_runtime_impl() {
 }
 
 status_system() {
-  "$container_bin" system status --format json 2> /dev/null || return 1
+  "$container_timeout" 15 "$container_bin" system status --format json 2> /dev/null || return 1
 }
 
 status_container() {
-  "$container_bin" machine inspect "$container_name" 2> /dev/null || return 1
+  "$container_timeout" 15 "$container_bin" machine inspect "$container_name" 2> /dev/null || return 1
 }
 
 status_ssh() {
@@ -547,14 +548,14 @@ doctor() {
 probe_container_dns_name() {
   local host="$1"
 
-  "$container_bin" machine run --root -i -n "$container_name" getent hosts "$host" < /dev/null > /dev/null 2>&1
+  "$container_timeout" 10 "$container_bin" machine run --root -i -n "$container_name" getent hosts "$host" < /dev/null > /dev/null 2>&1
 }
 
 probe_container_tcp_target() {
   local host="$1"
   local port="$2"
 
-  "$container_bin" machine run --root -i -n "$container_name" socat - "TCP:$host:$port,connect-timeout=5" < /dev/null > /dev/null 2>&1
+  "$container_timeout" 10 "$container_bin" machine run --root -i -n "$container_name" socat - "TCP:$host:$port,connect-timeout=5" < /dev/null > /dev/null 2>&1
 }
 
 # @cmd Check and recover Apple container runtime
