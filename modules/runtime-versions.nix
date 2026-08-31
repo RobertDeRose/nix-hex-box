@@ -1,8 +1,8 @@
 {
   appleContainer = {
-    version = "1.2.0";
-    url = "https://github.com/apple/container/releases/download/1.2.0/container-1.2.0-installer-signed.pkg";
-    hash = "sha256-0UDUB2/wWT1rT3xYcicXsqvofXVFLP4KIDeSun9I8Hw=";
+    version = "1.3.1";
+    url = "https://github.com/apple/container/releases/download/1.3.1/container-1.3.1-installer-signed.pkg";
+    hash = "sha256-p8G515J9MIdfL2x70dDLBsLapspXzp6QpRROiY/fVKg=";
   };
 
   socktainer = {
