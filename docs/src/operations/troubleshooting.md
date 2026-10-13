@@ -46,6 +46,18 @@ getent group nixbld
 stat -c '%a %U:%G' /dev/net/tun
 ```
 
+## NixOS VM tests time out or the guest daemon crashes
+
+The default `supportedFeatures` include `kvm` and `nixos-test`, so Nix schedules
+NixOS VM tests on the builder. Apple offers nested virtualization only on M3 and
+later chips, so on earlier Macs the guest has no `/dev/kvm` and QEMU runs each
+test VM in software emulation. Each VM then needs a full CPU and about 1 GB of
+memory, and several at once overload the machine: test steps hit their
+timeouts and the guest Nix daemon can run out of memory. The guest bootstrap
+logs `/dev/kvm is unavailable` when this applies.
+
+On those hosts, set `maxJobs` to 1 or 2 so only that many VM tests run at once.
+
 ## The machine changed IP address
 
 This is expected after stop/start. The Nix builder path does not use the machine

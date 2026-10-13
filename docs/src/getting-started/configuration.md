@@ -19,7 +19,8 @@ Common settings to review first:
 - `cpus`
 - `memory`
 - `homeMount`
-- `maxJobs`
+- `maxJobs` (keep it at 1-2 on Macs before M3, which run VM tests without KVM;
+  see Troubleshooting)
 - `protocol`
 - `idleShutdown.enable`
 - `idleShutdown.timeoutSeconds`

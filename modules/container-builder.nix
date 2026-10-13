@@ -195,6 +195,12 @@ let
     else
       echo "hexbox: /dev/net/tun is unavailable; sandboxed builds may not have networking" >&2
     fi
+    # Apple only offers nested virtualization on M3 and later, so the "kvm"
+    # feature can be advertised without /dev/kvm. VM tests still run, under
+    # QEMU software emulation, which is CPU-bound and much slower.
+    if [ ! -e /dev/kvm ]; then
+      echo "hexbox: /dev/kvm is unavailable; NixOS VM tests run under software emulation, keep maxJobs low (1-2)" >&2
+    fi
   '';
 
   machineBootstrapScript = pkgs.writeShellScript "hexbox-bootstrap-machine" ''
