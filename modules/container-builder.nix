@@ -12,6 +12,12 @@ let
 
   workDir = cfg.workingDirectory;
   containerExecutable = "/usr/local/bin/container";
+  # Keep the caller's selection first; background services may have a minimal PATH.
+  containerCommand = pkgs.writeShellScript "hexbox-container" ''
+    set -euo pipefail
+    export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+    exec ${escapeShellArg cfg.containerBinary} "$@"
+  '';
   hostContainerInternalDomain = "host.container.internal";
   hostContainerInternalLoopback = "203.0.113.113";
   socktainerAgentName = "hexbox-socktainer";
@@ -77,15 +83,15 @@ let
     fi
 
     if ${boolToString cfg.exposeHostContainerInternal}; then
-      if ${escapeShellArg cfg.containerBinary} system dns list 2>/dev/null | /usr/bin/grep -qx ${escapeShellArg hostContainerInternalDomain}; then
+      if ${escapeShellArg containerCommand} system dns list 2>/dev/null | /usr/bin/grep -qx ${escapeShellArg hostContainerInternalDomain}; then
         echo "Apple container DNS entry already present for ${hostContainerInternalDomain}" >&2
       else
         echo "creating Apple container DNS entry for ${hostContainerInternalDomain}" >&2
-        ${escapeShellArg cfg.containerBinary} system dns create ${escapeShellArg hostContainerInternalDomain} --localhost ${escapeShellArg hostContainerInternalLoopback}
+        ${escapeShellArg containerCommand} system dns create ${escapeShellArg hostContainerInternalDomain} --localhost ${escapeShellArg hostContainerInternalLoopback}
       fi
-    elif ${escapeShellArg cfg.containerBinary} system dns list 2>/dev/null | /usr/bin/grep -qx ${escapeShellArg hostContainerInternalDomain}; then
+    elif ${escapeShellArg containerCommand} system dns list 2>/dev/null | /usr/bin/grep -qx ${escapeShellArg hostContainerInternalDomain}; then
       echo "removing Apple container DNS entry for ${hostContainerInternalDomain}" >&2
-      ${escapeShellArg cfg.containerBinary} system dns delete ${escapeShellArg hostContainerInternalDomain}
+      ${escapeShellArg containerCommand} system dns delete ${escapeShellArg hostContainerInternalDomain}
     fi
   '';
 
@@ -206,7 +212,7 @@ let
   machineBootstrapScript = pkgs.writeShellScript "hexbox-bootstrap-machine" ''
     set -euo pipefail
 
-    container_bin=${escapeShellArg cfg.containerBinary}
+    container_bin=${escapeShellArg containerCommand}
     machine_name=${escapeShellArg machineName}
     workdir=${escapeShellArg workDir}
     timeout_seconds=${escapeShellArg (toString cfg.idleShutdown.timeoutSeconds)}
@@ -395,7 +401,7 @@ let
     set -euo pipefail
 
     if [ "$(/usr/bin/id -un)" != ${escapeShellArg owner} ]; then
-      exec /usr/bin/sudo -n -u ${escapeShellArg owner} -H "$0"
+      exec /usr/bin/sudo -n -u ${escapeShellArg owner} -H /usr/bin/env PATH="$PATH" "$0"
     fi
 
     lock_dir=${escapeShellArg "${workDir}/start.lock"}
@@ -422,7 +428,7 @@ let
     done
     printf '%s\n' "$$" > "$lock_pid_file"
     trap '/bin/rm -f "$lock_pid_file" 2>/dev/null || true; /bin/rmdir "$lock_dir" 2>/dev/null || true' EXIT
-    container_bin=${escapeShellArg cfg.containerBinary}
+    container_bin=${escapeShellArg containerCommand}
     machine_name=${escapeShellArg machineName}
     image_tag=${escapeShellArg builderImageTag}
     bootstrap_machine=${escapeShellArg machineBootstrapScript}
@@ -563,17 +569,17 @@ let
   stopScript = pkgs.writeShellScript "hexbox-stop-machine" ''
     set -euo pipefail
     if [ "$(/usr/bin/id -un)" != ${escapeShellArg owner} ]; then
-      exec /usr/bin/sudo -n -u ${escapeShellArg owner} -H "$0"
+      exec /usr/bin/sudo -n -u ${escapeShellArg owner} -H /usr/bin/env PATH="$PATH" "$0"
     fi
-    exec ${pkgs.coreutils}/bin/timeout 30 ${escapeShellArg cfg.containerBinary} machine stop ${escapeShellArg machineName}
+    exec ${pkgs.coreutils}/bin/timeout 30 ${escapeShellArg containerCommand} machine stop ${escapeShellArg machineName}
   '';
 
   resetScript = pkgs.writeShellScript "hexbox-reset-machine" ''
     set -euo pipefail
     if [ "$(/usr/bin/id -un)" != ${escapeShellArg owner} ]; then
-      exec /usr/bin/sudo -n -u ${escapeShellArg owner} -H "$0"
+      exec /usr/bin/sudo -n -u ${escapeShellArg owner} -H /usr/bin/env PATH="$PATH" "$0"
     fi
-    container_bin=${escapeShellArg cfg.containerBinary}
+    container_bin=${escapeShellArg containerCommand}
     machine_name=${escapeShellArg machineName}
     timeout_bin=${escapeShellArg "${pkgs.coreutils}/bin/timeout"}
     machine_inspect_timeout_seconds=5
@@ -627,7 +633,7 @@ let
 
     owner=${escapeShellArg owner}
     start_container=${escapeShellArg "${workDir}/start-container.sh"}
-    container_bin=${escapeShellArg cfg.containerBinary}
+    container_bin=${escapeShellArg containerCommand}
     machine_name=${escapeShellArg machineName}
     container_port=${escapeShellArg (toString cfg.containerPort)}
 
@@ -659,7 +665,7 @@ let
 
     if [ "$(/usr/bin/id -u)" = 0 ]; then
       owner_uid=$(/usr/bin/id -u "$owner")
-      exec /bin/launchctl asuser "$owner_uid" /usr/bin/sudo -n -u "$owner" -H "$0"
+      exec /bin/launchctl asuser "$owner_uid" /usr/bin/sudo -n -u "$owner" -H /usr/bin/env PATH="$PATH" "$0"
     fi
 
     echo "hexbox: proxy must run as $owner or root" >&2
@@ -749,7 +755,6 @@ let
 
     export HB_HOST_ALIAS=${escapeShellArg cfg.hostAlias}
     export HB_SSH_CONFIG=${escapeShellArg "${workDir}/ssh_config_root"}
-    export HB_CONTAINER_BIN=${escapeShellArg cfg.containerBinary}
     export HB_CONTAINER_TIMEOUT=${escapeShellArg "${pkgs.coreutils}/bin/timeout"}
     export HB_CONTAINER_NAME=${escapeShellArg machineName}
     export HB_RECONCILE_HOST_CONTAINER_INTERNAL=${escapeShellArg "${workDir}/reconcile-host-container-internal.sh"}
@@ -819,8 +824,8 @@ in
 
     containerBinary = mkOption {
       type = types.str;
-      default = containerExecutable;
-      description = "Path to Apple's container CLI binary installed by the official pkg.";
+      default = "container";
+      description = "Apple container CLI command resolved through PATH, or an explicit binary path.";
     };
 
     installer.url = mkOption {
@@ -1064,7 +1069,7 @@ in
         fi
       ''}
 
-      if ${escapeShellArg cfg.containerBinary} system status >/dev/null 2>&1; then
+      if ${escapeShellArg containerCommand} system status >/dev/null 2>&1; then
         ${reconcileHostContainerInternalScript}
       else
         echo "warning: Apple container system is not running; skipping ${hostContainerInternalDomain} DNS reconciliation" >&2

@@ -14,7 +14,7 @@ hb_init() {
 
   host_alias=${HB_HOST_ALIAS:?}
   ssh_config=${HB_SSH_CONFIG:?}
-  container_bin=${HB_CONTAINER_BIN:?}
+  container_bin=container
   container_timeout=${HB_CONTAINER_TIMEOUT:?}
   container_name=${HB_CONTAINER_NAME:?}
   reconcile_host_container_internal=${HB_RECONCILE_HOST_CONTAINER_INTERNAL:?}

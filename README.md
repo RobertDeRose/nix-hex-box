@@ -182,6 +182,13 @@ the module to export that socket as `DOCKER_HOST` in the user environment.
 
 ## Helper
 
+The helper runs `container` from your shell's `PATH`, so it uses the host CLI
+selected by Homebrew, mise, or Apple's installer. Lifecycle scripts also resolve
+`container` through PATH by default and preserve it when switching to the runtime
+user. Background calls fall back to `/opt/homebrew/bin` and `/usr/local/bin`;
+ensure mise is on their PATH if using mise there. Set
+`services.container-builder.containerBinary` to override the command explicitly.
+
 After activation, use:
 
 ```bash

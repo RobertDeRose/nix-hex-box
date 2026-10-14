@@ -10,7 +10,9 @@ Important options:
 - `containerPort`
 - `workingDirectory`
 - `user`
-- `containerBinary`
+- `containerBinary`: defaults to `container`, resolved through PATH; accepts an
+  explicit binary path. Lifecycle scripts preserve PATH when switching to the
+  runtime user and fall back to `/opt/homebrew/bin` and `/usr/local/bin`.
 - `installer.url`
 - `installer.hash`
 - `installer.version`
