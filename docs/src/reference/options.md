@@ -13,9 +13,6 @@ Important options:
 - `containerBinary`: defaults to `container`, resolved through PATH; accepts an
   explicit binary path. Lifecycle scripts preserve PATH when switching to the
   runtime user and fall back to `/opt/homebrew/bin` and `/usr/local/bin`.
-- `installer.url`
-- `installer.hash`
-- `installer.version`
 - `containerName`
 - `imageRepository`
 - `nixVersion`
@@ -37,12 +34,14 @@ Important options:
 - `idleShutdown.timeoutSeconds`
 - `cli.completions.enable`
 - `socktainer.enable`
-- `socktainer.binary`
+- `socktainer.binary`: defaults to `socktainer`, resolved through PATH; accepts
+  an explicit binary path. Falls back to `/opt/homebrew/bin`, `/usr/local/bin`,
+  and `/opt/socktainer/bin`.
 - `socktainer.homeDirectory`
 - `socktainer.setDockerHost`
-- `socktainer.installer.url`
-- `socktainer.installer.hash`
-- `socktainer.installer.version`
+
+The `installer.*` and `socktainer.installer.*` options were removed. HexBox no
+longer installs either runtime, and setting them is an evaluation error.
 
 Machine notes:
 

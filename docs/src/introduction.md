@@ -12,9 +12,9 @@ to a local virtualized builder while keeping the host configuration declarative.
 
 Current design highlights:
 
-- installs Apple `container` from the official signed release package
+- uses the Apple `container` CLI you install yourself, resolved through `PATH`
 - pulls the published Alpine/Lix-based builder image by default, with an optional local custom image build
-- can optionally install Socktainer to expose a Docker-compatible local API socket
+- can optionally manage Socktainer to expose a Docker-compatible local API socket
 - configures `nix.buildMachines` for `ssh-ng://container-builder`
 - manages durable state under `~/.local/state/hb`
 - wakes the builder machine on demand through SSH `ProxyCommand`

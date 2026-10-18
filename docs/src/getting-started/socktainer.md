@@ -1,6 +1,6 @@
 # Socktainer
 
-`nix-hex-box` can optionally install and manage
+`nix-hex-box` can optionally manage
 [Socktainer](https://github.com/socktainer/socktainer), which exposes a
 Docker-compatible local API socket on top of Apple `container`.
 
@@ -12,8 +12,11 @@ services.container-builder.socktainer = {
 };
 ```
 
-The module installs the official Socktainer pkg, creates a user launch agent,
-and starts the daemon in the current primary user's session.
+Install Socktainer yourself first. The module creates a user launch agent and
+starts the daemon in the current primary user's session. The agent resolves
+`socktainer` through PATH and falls back to `/opt/homebrew/bin`,
+`/usr/local/bin`, and `/opt/socktainer/bin`; set `socktainer.binary` to use an
+explicit path. Activation prints an error if Socktainer cannot be found.
 
 Socktainer stores its socket and logs under:
 

@@ -8,16 +8,37 @@ with lib;
 let
   cfg = config.services.container-builder;
   runtimeVersions = import ./runtime-versions.nix;
+  removedOption =
+    path:
+    mkRemovedOptionModule (
+      [
+        "services"
+        "container-builder"
+      ]
+      ++ path
+    );
   owner = cfg.user;
 
   workDir = cfg.workingDirectory;
-  containerExecutable = "/usr/local/bin/container";
   # Keep the caller's selection first; background services may have a minimal PATH.
-  containerCommand = pkgs.writeShellScript "hexbox-container" ''
-    set -euo pipefail
-    export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
-    exec ${escapeShellArg cfg.containerBinary} "$@"
-  '';
+  mkPathCommand =
+    name: command: fallbackPath: hint:
+    pkgs.writeShellScript "hexbox-${name}" ''
+      set -euo pipefail
+      export PATH="''${PATH:+$PATH:}${fallbackPath}"
+      if ! command -v ${escapeShellArg command} >/dev/null 2>&1; then
+        echo ${escapeShellArg "hexbox: `${command}` not found on PATH. ${hint}"} >&2
+        exit 127
+      fi
+      exec ${escapeShellArg command} "$@"
+    '';
+  containerCommand =
+    mkPathCommand "container" cfg.containerBinary "/opt/homebrew/bin:/usr/local/bin"
+      "Install Apple container (Homebrew, mise, or https://github.com/apple/container/releases) or set services.container-builder.containerBinary.";
+  socktainerCommand =
+    mkPathCommand "socktainer-bin" cfg.socktainer.binary
+      "/opt/homebrew/bin:/usr/local/bin:/opt/socktainer/bin"
+      "Install Socktainer (https://github.com/socktainer/socktainer/releases) or set services.container-builder.socktainer.binary.";
   hostContainerInternalDomain = "host.container.internal";
   hostContainerInternalLoopback = "203.0.113.113";
   socktainerAgentName = "hexbox-socktainer";
@@ -63,16 +84,6 @@ let
     if cfg.imageBuildContext != null then cfg.imageBuildContext else "${workDir}/builder-image/context";
   machineLifecycleScript = builtins.readFile ./../scripts/container-machine-lifecycle.sh;
   remoteStore = "${cfg.protocol}://${cfg.hostAlias}";
-
-  containerInstallerPkg = pkgs.fetchurl {
-    url = cfg.installer.url;
-    hash = cfg.installer.hash;
-  };
-
-  socktainerInstallerPkg = pkgs.fetchurl {
-    url = cfg.socktainer.installer.url;
-    hash = cfg.socktainer.installer.hash;
-  };
 
   reconcileHostContainerInternalScript = pkgs.writeShellScript "hexbox-reconcile-host-container-internal" ''
     set -euo pipefail
@@ -714,7 +725,7 @@ let
 
     export HOME=${escapeShellArg cfg.socktainer.homeDirectory}
     ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg socktainerStateDirectory}
-    exec ${escapeShellArg cfg.socktainer.binary} --no-check-compatibility
+    exec ${socktainerCommand} --no-check-compatibility
   '';
 
   userSshConfig = pkgs.writeText "container-builder-ssh-config" ''
@@ -755,6 +766,7 @@ let
 
     export HB_HOST_ALIAS=${escapeShellArg cfg.hostAlias}
     export HB_SSH_CONFIG=${escapeShellArg "${workDir}/ssh_config_root"}
+    export HB_CONTAINER_BIN=${escapeShellArg containerCommand}
     export HB_CONTAINER_TIMEOUT=${escapeShellArg "${pkgs.coreutils}/bin/timeout"}
     export HB_CONTAINER_NAME=${escapeShellArg machineName}
     export HB_RECONCILE_HOST_CONTAINER_INTERNAL=${escapeShellArg "${workDir}/reconcile-host-container-internal.sh"}
@@ -794,6 +806,16 @@ let
   };
 in
 {
+  imports = [
+    (removedOption [
+      "installer"
+    ] "HexBox no longer installs Apple container; install it yourself and keep it on PATH.")
+    (removedOption [
+      "socktainer"
+      "installer"
+    ] "HexBox no longer installs Socktainer; install it yourself and keep it on PATH.")
+  ];
+
   options.services.container-builder = {
     enable = mkEnableOption "Apple container machine Linux remote builder";
 
@@ -826,24 +848,6 @@ in
       type = types.str;
       default = "container";
       description = "Apple container CLI command resolved through PATH, or an explicit binary path.";
-    };
-
-    installer.url = mkOption {
-      type = types.str;
-      default = runtimeVersions.appleContainer.url;
-      description = "Official Apple container installer package URL.";
-    };
-
-    installer.hash = mkOption {
-      type = types.str;
-      default = runtimeVersions.appleContainer.hash;
-      description = "Hash of the Apple container installer package.";
-    };
-
-    installer.version = mkOption {
-      type = types.str;
-      default = runtimeVersions.appleContainer.version;
-      description = "Expected `container --version` string suffix used for activation checks.";
     };
 
     containerName = mkOption {
@@ -984,13 +988,13 @@ in
     socktainer.enable = mkOption {
       type = types.bool;
       default = false;
-      description = "Install and manage Socktainer as an optional Docker API compatibility layer on top of Apple container.";
+      description = "Manage a Socktainer launch agent as an optional Docker API compatibility layer on top of Apple container. Socktainer must already be installed.";
     };
 
     socktainer.binary = mkOption {
       type = types.str;
-      default = "/opt/socktainer/bin/socktainer";
-      description = "Path to the Socktainer binary installed by its official pkg.";
+      default = "socktainer";
+      description = "Socktainer command resolved through PATH, or an explicit binary path.";
     };
 
     socktainer.homeDirectory = mkOption {
@@ -1005,23 +1009,6 @@ in
       description = "Export `DOCKER_HOST` in the user session environment so Docker-compatible clients use Socktainer by default.";
     };
 
-    socktainer.installer.url = mkOption {
-      type = types.str;
-      default = runtimeVersions.socktainer.url;
-      description = "Official Socktainer installer package URL.";
-    };
-
-    socktainer.installer.hash = mkOption {
-      type = types.str;
-      default = runtimeVersions.socktainer.hash;
-      description = "Hash of the Socktainer installer package.";
-    };
-
-    socktainer.installer.version = mkOption {
-      type = types.str;
-      default = runtimeVersions.socktainer.version;
-      description = "Expected Socktainer release version used for activation checks.";
-    };
   };
 
   config = mkIf cfg.enable {
@@ -1049,11 +1036,6 @@ in
     environment.etc."ssh/ssh_config.d/201-container-builder.conf".source = rootSshConfig;
 
     system.activationScripts.extraActivation.text = mkAfter ''
-      if [ ! -x ${escapeShellArg containerExecutable} ] || ! ${escapeShellArg containerExecutable} --version 2>/dev/null | /usr/bin/grep -q ${escapeShellArg cfg.installer.version}; then
-        echo "installing Apple container ${cfg.installer.version} from official pkg..." >&2
-        /usr/sbin/installer -pkg ${escapeShellArg containerInstallerPkg} -target /
-      fi
-
       /bin/rm -f /etc/ssh/ssh_config.d/201-container-builder-socat.conf
       stale_proxy_agent=${escapeShellArg "/Users/${owner}/Library/LaunchAgents/com.github.robertderose.hexbox-proxy.plist"}
       /bin/launchctl bootout "gui/$(/usr/bin/id -u ${escapeShellArg owner})" "$stale_proxy_agent" >/dev/null 2>&1 || true
@@ -1063,13 +1045,14 @@ in
       /bin/rm -f "$stale_machine_proxy_agent"
 
       ${optionalString cfg.socktainer.enable ''
-        if [ ! -x ${escapeShellArg cfg.socktainer.binary} ] || ! ${escapeShellArg cfg.socktainer.binary} --version 2>/dev/null | /usr/bin/grep -q ${escapeShellArg cfg.socktainer.installer.version}; then
-          echo "installing Socktainer ${cfg.socktainer.installer.version} from official pkg..." >&2
-          /usr/sbin/installer -pkg ${escapeShellArg socktainerInstallerPkg} -target /
+        if ! ${socktainerCommand} --version >/dev/null; then
+          echo "error: Socktainer is not installed; the Socktainer launch agent will fail until it is" >&2
         fi
       ''}
 
-      if ${escapeShellArg containerCommand} system status >/dev/null 2>&1; then
+      if ! ${containerCommand} --version >/dev/null; then
+        echo "error: Apple container is not installed; skipping ${hostContainerInternalDomain} DNS reconciliation" >&2
+      elif ${escapeShellArg containerCommand} system status >/dev/null 2>&1; then
         ${reconcileHostContainerInternalScript}
       else
         echo "warning: Apple container system is not running; skipping ${hostContainerInternalDomain} DNS reconciliation" >&2
