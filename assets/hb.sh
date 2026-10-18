@@ -276,7 +276,6 @@ builder::logs() {
 
 run_remote_build_smoke() {
   local expr
-  local output_path
   local smoke_timeout_seconds=60
   local status
   local -a build_args
@@ -286,13 +285,15 @@ run_remote_build_smoke() {
       name = "hexbox-builder-smoke";
       system = "aarch64-linux";
       builder = "/bin/sh";
+      nonce = "@NONCE@";
       args = [ "-c" "printf ok > \"$out\"" ];
     }
   '
+  # Build a fresh derivation each run; Nix never sends --rebuild builds to
+  # remote builders, so reusing a cached output would test nothing.
+  expr=${expr/@NONCE@/$(/bin/date +%s)-$$}
 
   print_heading '🧪' 'Remote build smoke test (trivial aarch64-linux derivation)'
-
-  output_path=$(nix eval --raw --impure --expr "(${expr}).outPath")
 
   build_args=(
     build
@@ -302,10 +303,6 @@ run_remote_build_smoke() {
     --impure
     --expr "$expr"
   )
-
-  if nix path-info "$output_path" > /dev/null 2>&1; then
-    build_args+=(--rebuild)
-  fi
 
   set +e
   /usr/bin/perl -e '
