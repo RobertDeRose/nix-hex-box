@@ -995,9 +995,10 @@ in
       /bin/rm -f "$stale_socktainer_agent"
       /bin/rm -f ${escapeShellArg "${workDir}/socktainer.sh"}
 
+      # The apiserver runs in the owner's launchd session, which root cannot query.
       if ! ${containerCommand} --version >/dev/null; then
         echo "error: Apple container is not installed; skipping ${hostContainerInternalDomain} DNS reconciliation" >&2
-      elif ${escapeShellArg containerCommand} system status >/dev/null 2>&1; then
+      elif /usr/bin/sudo -n -u ${escapeShellArg owner} -H ${escapeShellArg containerCommand} system status >/dev/null 2>&1; then
         ${reconcileHostContainerInternalScript}
       else
         echo "warning: Apple container system is not running; skipping ${hostContainerInternalDomain} DNS reconciliation" >&2
