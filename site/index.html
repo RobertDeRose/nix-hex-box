@@ -120,7 +120,7 @@
     <ol class="track">
       <li><b>Nix asks for Linux.</b> A derivation needs <code>aarch64-linux</code>, so the <code>nix-daemon</code> picks the <code>container-builder</code> machine.</li>
       <li><b>SSH knocks.</b> Its <code>ProxyCommand</code> switches from root to you, because you own the <code>container</code> runtime.</li>
-      <li><b>The box wakes.</b> If <code>nix-builder</code> is asleep, the proxy boots it and waits for a real SSH handshake.</li>
+      <li><b>The box wakes.</b> If <code>nix-builder</code> is asleep, the proxy boots it and waits for its SSH server to answer.</li>
       <li><b>The build runs inside.</b> <code>socat</code> relays to the guest’s <code>sshd</code>, and its <code>nix-daemon</code> does the work.</li>
       <li><b>Results come home.</b> Outputs are copied back into your Mac’s store, ready to use.</li>
       <li><b>The box naps.</b> With no connections left, it powers off after the idle timeout.</li>
@@ -184,8 +184,10 @@ container system start</code></pre>
       <li>
         <h3>Switch, then try a build</h3>
         <pre class="block"><button type="button" class="copy">Copy</button><code>sudo darwin-rebuild switch --flake .#my-host
+~/.local/state/hb/bootstrap-keys.sh
+hb builder repair
 hb builder test</code></pre>
-        <p class="note">The first build pulls the image and creates the machine, so it takes a while. After that, the box wakes in seconds.</p>
+        <p class="note"><code>bootstrap-keys.sh</code> creates the builder’s SSH keys, and you only run it once. The first <code>hb builder repair</code> downloads the image and creates the machine, so it takes a few minutes. After that, the box wakes in seconds.</p>
       </li>
     </ol>
   </div>

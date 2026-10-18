@@ -7,11 +7,11 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Getting Started',
       collapsed: false,
-      items: ['getting-started/overview', 'getting-started/installation', 'getting-started/configuration'],
+      items: ['getting-started/installation', 'getting-started/configuration'],
     },
     {
       type: 'category',
-      label: 'Architecture',
+      label: 'How It Works',
       items: ['architecture/runtime-model', 'architecture/generated-files', 'architecture/networking'],
     },
     {

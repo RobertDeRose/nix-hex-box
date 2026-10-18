@@ -1,22 +1,51 @@
-# Design Notes
+# Design notes
 
-`nix-hex-box` currently follows these design choices:
+Why HexBox works the way it does, and what it can't do.
 
-- published Alpine/Lix-based builder image in this repository's GHCR package
-- optional local custom image builds from `imageContainerfile`
-- persistent Apple `container machine` with generation-aware recreation for image-contract changes
-- on-demand startup through SSH `ProxyCommand`
-- no localhost bridge or published SSH port in the default builder path
-- guest-side `builder` user with narrow passwordless sudo for the remote `nix-daemon`
-- guest-side idle shutdown using a lightweight watchdog
-- host-side `container machine run` executed as the runtime-owning macOS user, even when SSH is launched by root `nix-daemon`
+## Decisions
 
-Known constraints:
+**A persistent machine, not a container.** An ordinary container starts fresh
+each time, which would throw away the builder's `/nix` store. An Apple
+`container` machine keeps its disk, so the builder can shut down when idle and
+still have everything it built when it comes back.
 
-- Apple `container` remains an external mutable runtime
-- custom local builder image builds depend on the user's Containerfile inputs when configured
-- deleting the container machine deletes guest-local `/nix` store contents
-- host and guest behavior still depend on the health of Apple's virtualization and networking layers
+**SSH through `container`, not over the network.** The machine's IP address
+changes on every boot. Connecting through `container machine run` instead
+means Nix never needs to know the address, and no port is opened on your Mac.
 
-Historical design notes from earlier overlay-based and bridge-based experiments
-should no longer be treated as current behavior.
+**Your user owns the runtime, even for root.** Apple's `container` runs per
+user, and the Nix daemon runs as root. Rather than run a second runtime as
+root, the SSH proxy switches to your user before calling `container`.
+
+**A narrow sudo rule inside the guest.** Nix logs in as an ordinary `builder`
+user, which can run one command as root: the Nix daemon. That's the least
+access a remote builder needs.
+
+**The idle watchdog lives in the guest.** The machine decides for itself when
+nobody is using it, by watching its own SSH connections. Your Mac doesn't need
+a background service to stop it.
+
+**Bring your own `container`.** HexBox doesn't install Apple's `container`, so
+you can use Homebrew, mise, or Apple's installer, and keep it up to date
+however you like.
+
+## Limits
+
+- The builder only builds `aarch64-linux`.
+- HexBox depends on Apple's `container`, which is still young and sometimes
+  needs a restart. `hb builder repair` handles the common cases.
+- On M1 and M2 Macs, NixOS VM tests run in software emulation, because those
+  chips can't run virtual machines inside virtual machines.
+- The default image comes from GitHub's container registry, so the first start
+  needs to reach it.
+- Replacing the machine, with `hb builder reset` or by changing the image,
+  deletes everything in its `/nix` store.
+- macOS only partly reclaims memory from a running machine. The memory is
+  returned in full when the builder shuts down.
+
+## Working on HexBox
+
+The `hb` helper's source is `scripts/hb.sh`. `assets/hb.sh` is built from it
+with `argc --argc-build`, so edit the script and rebuild, rather than editing
+the built copy. The shell completions in `assets/completions/` are written by
+hand; update them when you add or rename a command.

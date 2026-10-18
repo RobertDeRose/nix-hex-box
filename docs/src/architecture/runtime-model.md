@@ -1,29 +1,60 @@
-# Runtime Model
+# The builder machine
 
-Durable host state lives under:
+The builder is an Apple `container` machine named `nix-builder`. Unlike an
+ordinary container, a machine is a persistent virtual machine: it keeps its
+disk when it stops, and boots back into the same state. That's what lets the
+builder shut down when idle without losing its work.
 
-```text
-~/.local/state/hb
-```
+## What's inside
 
-The current runtime model is:
+The machine runs the builder image (Alpine Linux with OpenSSH and Lix, unless
+you [use your own](../getting-started/configuration.md#using-your-own-builder-image)).
+When HexBox first creates it, a setup script:
 
-- the builder is an Apple `container machine`, not an ordinary ephemeral container
-- activation rewrites helper scripts and SSH config
-- by default, the machine is created from the published HexBox GHCR image
-- machine creation uses Apple Container's normal boot path for first-time user
-  setup, then proves liveness with a bounded `machine run ... true` probe
-- failed run probes are treated as stale machine state and retried after stopping
-  the machine rather than trusting `machine inspect` alone
-- custom `imageContainerfile` configurations build a local OCI image when the tag is missing
-- the SSH path uses `ProxyCommand` to auto-start the machine on demand
-- the same SSH path is usable by the root `nix-daemon`; it sudoes back to the runtime-owning macOS user before invoking Apple `container`
-- the guest SSH user is `builder`
-- the remote `nix-daemon` runs through a narrow passwordless sudo wrapper inside the guest
-- boot-time preparation provisions the `nixbld` build users and makes `/dev/net/tun` available to sandboxed builds
-- idle shutdown runs inside the guest and powers off the machine after the configured inactivity timeout
+- installs your Mac's SSH key for the `builder` user, and the machine's host
+  key,
+- writes a short `nix.conf` that uses `https://cache.nixos.org/`, so builds can
+  download what's already been built instead of compiling it,
+- adds a sudo rule that lets `builder` run only the Nix daemon as root, which
+  Nix needs to build, and
+- installs the idle watchdog that shuts the machine down.
 
-The builder machine owns a persistent guest `/nix` store. Build outputs and
-substitutes survive machine stop/start cycles. They are deleted when the machine
-is removed, including explicit `hb builder reset` and automatic recreation after
-an image-contract generation change.
+On every boot, the machine also creates the `nixbld` build users and makes
+`/dev/net/tun` available, which sandboxed builds need for networking.
+
+## Its `/nix` store is kept
+
+Everything the builder builds or downloads stays in its `/nix` store. Stopping
+and starting the machine keeps it. Two things delete it, because both replace
+the machine:
+
+- running `hb builder reset`, and
+- changing the image, for example a new `nixVersion` or a different
+  Containerfile. HexBox notices the change on the next start and recreates the
+  machine.
+
+Changing other settings, such as the idle timeout, updates the machine in
+place and keeps the store.
+
+## Starting and stopping
+
+You never start or stop the machine yourself. The first SSH connection boots
+it ([How Nix reaches the builder](./networking.md) explains how), and the idle
+watchdog inside it shuts it down.
+
+The watchdog checks for open SSH connections every 30 seconds. Once there have
+been none for the idle timeout (five minutes by default), it stops the
+machine. Its log is `/var/log/hexbox-idle.log` inside the machine, which you
+can read with `hb builder logs idle`.
+
+When the machine starts, HexBox doesn't trust its reported status alone. It
+runs a quick command inside the machine to prove it actually works, and if
+that fails, stops the machine and boots it again. This recovers from the
+occasional machine that Apple's `container` reports as running but isn't
+responding.
+
+## Memory
+
+macOS gives memory back from a running virtual machine only partly. The
+memory you give the builder is reliably returned to your Mac when the machine
+shuts down, which is one more reason the idle shutdown is on by default.

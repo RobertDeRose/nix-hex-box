@@ -104,3 +104,6 @@ code, pre, kbd { font-variation-settings: var(--hb-mono); }
 
 .footer { border-top: 1px solid var(--hb-rule); }
 .footer__copyright { font-size: 0.875rem; }
+
+/* The mascot at the top of the introduction. */
+.markdown img[alt^="The HexBox mascot"] { display: block; width: 12rem; margin: 0 auto 1.5rem; }
