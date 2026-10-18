@@ -83,26 +83,26 @@ url = "https://github.com/hadolint/hadolint/releases/download/v2.14.0/hadolint-m
 url_api = "https://api.github.com/repos/hadolint/hadolint/releases/assets/295944077"
 
 [[tools.hk]]
-version = "1.41.1"
+version = "2.7.0"
 backend = "aqua:jdx/hk"
 
 [tools.hk.options]
 "vars.arch" = "aarch64"
 
 [tools.hk."platforms.linux-arm64"]
-checksum = "sha256:a1f445f4be2be6509429e784f6cb21800a777ddd70737dd18c4066e641d5652b"
-url = "https://github.com/jdx/hk/releases/download/v1.41.1/hk-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/hk/releases/assets/392861920"
+checksum = "sha256:a64c8cead6f9a47e6bf4d639122ca3eeba60480763076330ba230a8cb7821520"
+url = "https://github.com/jdx/hk/releases/download/v2.7.0/hk-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/hk/releases/assets/646980276"
 
 [tools.hk."platforms.linux-x64"]
-checksum = "sha256:19ec5a5db83e5153c8526345682fce885f341f24d5ed27836131d5dca3607f76"
-url = "https://github.com/jdx/hk/releases/download/v1.41.1/hk-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/hk/releases/assets/392861921"
+checksum = "sha256:2d5819ee2bc3e5b424d90fb05928c05297bfa4d36490628b075b8f8afe14b7b1"
+url = "https://github.com/jdx/hk/releases/download/v2.7.0/hk-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/hk/releases/assets/646980316"
 
 [tools.hk."platforms.macos-arm64"]
-checksum = "sha256:374550245ffdf1d035638166483d8d79b808bd4473fd716bc0a79ee7b6e96d26"
-url = "https://github.com/jdx/hk/releases/download/v1.41.1/hk-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/jdx/hk/releases/assets/392861918"
+checksum = "sha256:3b98dd45e493a421de5b327c87b3e0fdfac39383e11b6a2b48b43bbc5a9ce0d6"
+url = "https://github.com/jdx/hk/releases/download/v2.7.0/hk-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/jdx/hk/releases/assets/646980274"
 
 [[tools.node]]
 version = "24.18.0"
