@@ -936,13 +936,13 @@ in
     readiness.timeoutSeconds = mkOption {
       type = types.ints.positive;
       default = 60;
-      description = "How long startup waits for the builder SSH service to become reachable.";
+      description = "How long `hb builder repair` and `hb builder reset` wait for an SSH login to the builder to succeed.";
     };
 
     readiness.intervalSeconds = mkOption {
       type = types.ints.positive;
       default = 1;
-      description = "Polling interval for builder SSH readiness checks.";
+      description = "How often `hb builder repair` and `hb builder reset` retry the SSH login while waiting.";
     };
 
     idleShutdown.enable = mkOption {
