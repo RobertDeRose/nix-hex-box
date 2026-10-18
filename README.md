@@ -13,7 +13,7 @@ Documentation site:
 
 Current design highlights:
 
-- installs Apple `container` from the official signed GitHub release package
+- uses the Apple `container` CLI you install yourself (Homebrew, mise, or Apple's pkg)
 - pulls the published Alpine/Lix-based builder image by default, with an optional local custom image build
 - creates a persistent Apple `container machine` instead of an ephemeral container
 - configures `nix.buildMachines` for `ssh-ng://container-builder`
@@ -23,7 +23,6 @@ Current design highlights:
 - keeps the guest `/nix` store persistent across machine stops and starts
 - powers the guest off after a configurable idle timeout with no active SSH connections
 - manages durable host state under `~/.local/state/hb`
-- can install and manage Socktainer as an optional Docker-compatible API layer
 - installs host-side SSH aliases for both `nix-builder` and `container-builder`
 - writes a generated `known_hosts` file under `~/.local/state/hb` so SSH verifies the builder host key
 - exposes `host.container.internal` for Apple containers by default via `container system dns`
@@ -36,9 +35,11 @@ The flake exports:
 - `darwinModules.default`
 - `darwinModules.container-builder`
 
-The repo also contains a scheduled workflow that opens a Robborg-authored PR
-for pinned runtime-version updates, validates it, and auto-merges it after the
-lint workflow passes.
+## Requirements
+
+HexBox does not install Apple `container`. Install it any way you like
+(Homebrew, mise, or Apple's pkg) and keep it on `PATH`. Activation prints an
+error when `container` is missing.
 
 ## Example
 
@@ -57,7 +58,6 @@ lint workflow passes.
             cpus = 4;
             memory = "8G";
             maxJobs = 4;
-            socktainer.enable = true;
             # Optional override if you do not want to use config.system.primaryUser.
             user = "myuser";
           };
@@ -89,9 +89,8 @@ The image contains Alpine 3.22, OpenSSH, sudo, and Lix. The module creates a
 persistent Apple container machine from that image and bootstraps the
 host-specific SSH keys, `nix.conf`, sudoers rule, and idle timeout.
 
-GitHub Actions rebuilds and publishes `latest` on the same weekly schedule as
-the runtime-version updater so Alpine package updates, such as OpenSSH fixes,
-are available to new or recreated machines. When the configured machine image
+GitHub Actions rebuilds and publishes `latest` weekly so Alpine package
+updates, such as OpenSSH fixes, are available to new or recreated machines. When the configured machine image
 contract changes, HexBox recreates the builder machine automatically; this also
 deletes the guest-local store.
 Builder image publishing is skipped until the configured Lix tag is at least
@@ -138,12 +137,6 @@ Available machine options:
 Available host/container integration options:
 
 - `services.container-builder.exposeHostContainerInternal`
-- `services.container-builder.socktainer.enable`
-- `services.container-builder.socktainer.homeDirectory`
-- `services.container-builder.socktainer.binary`
-- `services.container-builder.socktainer.installer.url`
-- `services.container-builder.socktainer.installer.hash`
-- `services.container-builder.socktainer.installer.version`
 
 The builder machine writes a minimal `nix.conf` with
 `https://cache.nixos.org/` configured as a substituter. Bootstrap provisions the
@@ -158,36 +151,20 @@ services.container-builder = {
 };
 ```
 
-## Socktainer
-
-Set `services.container-builder.socktainer.enable = true;` to install the
-official Socktainer pkg and manage a user launch agent for the current primary
-user.
-
-This exposes a Docker-compatible Unix socket at:
-
-```text
-$HOME/.socktainer/container.sock
-```
-
-Example:
-
-```bash
-export DOCKER_HOST=unix://$HOME/.socktainer/container.sock
-docker ps
-```
-
-Set `services.container-builder.socktainer.setDockerHost = true;` if you want
-the module to export that socket as `DOCKER_HOST` in the user environment.
-
 ## Helper
 
 The helper runs `container` from your shell's `PATH`, so it uses the host CLI
 selected by Homebrew, mise, or Apple's installer. Lifecycle scripts also resolve
 `container` through PATH by default and preserve it when switching to the runtime
-user. Background calls fall back to `/opt/homebrew/bin` and `/usr/local/bin`;
-ensure mise is on their PATH if using mise there. Set
-`services.container-builder.containerBinary` to override the command explicitly.
+user. Background calls fall back to `/opt/homebrew/bin`, `/usr/local/bin`, and
+the runtime user's mise shims. Set `services.container-builder.containerBinary`
+to override the command explicitly.
+
+If you install `container` with mise, install it globally
+(`mise use -g container`) so background calls resolve the same version from
+any directory. A per-project mise install is not visible to nix-daemon or
+activation; set `containerBinary` to its absolute path instead, for example the
+output of `mise which container`.
 
 After activation, use:
 

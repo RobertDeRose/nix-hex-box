@@ -17,8 +17,6 @@ Use the helper to read the most important logs:
 hb builder logs readiness
 hb builder logs boot
 hb builder logs idle
-hb socktainer logs
-hb socktainer logs -f
 ```
 
 These logs are usually the fastest way to determine whether a failure is in:

@@ -7,6 +7,7 @@ set -eo pipefail
 
 hb_env_loaded=0
 
+# Load the HB_* settings exported by the module wrapper once; abort if any is unset.
 hb_init() {
   if [ "$hb_env_loaded" -eq 1 ]; then
     return
@@ -14,16 +15,10 @@ hb_init() {
 
   host_alias=${HB_HOST_ALIAS:?}
   ssh_config=${HB_SSH_CONFIG:?}
-  container_bin=container
+  container_bin=${HB_CONTAINER_BIN:?}
   container_timeout=${HB_CONTAINER_TIMEOUT:?}
   container_name=${HB_CONTAINER_NAME:?}
   reconcile_host_container_internal=${HB_RECONCILE_HOST_CONTAINER_INTERNAL:?}
-  socktainer_enabled=${HB_SOCKTAINER_ENABLED:?}
-  socktainer_agent_label=${HB_SOCKTAINER_AGENT_LABEL:?}
-  socktainer_socket=${HB_SOCKTAINER_SOCKET:?}
-  socktainer_health=${HB_SOCKTAINER_HEALTH:?}
-  socktainer_err_log=${HB_SOCKTAINER_ERR_LOG:?}
-  socktainer_out_log=${HB_SOCKTAINER_OUT_LOG:?}
   readiness_log=${HB_READINESS_LOG:?}
   remote_store=${HB_REMOTE_STORE:?}
   start_script=${HB_START_SCRIPT:?}
@@ -37,7 +32,6 @@ hb_init() {
 if [ "$#" -eq 1 ]; then
   case "$1" in
     builder) set -- builder status ;;
-    socktainer) set -- socktainer status ;;
   esac
 fi
 
@@ -434,14 +428,9 @@ builder::gc() {
   exec /usr/bin/ssh -F "$ssh_config" "$host_alias" 'nix-collect-garbage -d'
 }
 
-# @cmd Show raw launchd and container inspection data
+# @cmd Show raw container machine inspection data
 builder::inspect() {
   hb_init
-  if launchctl print "gui/$(id -u)/$socktainer_agent_label" > /dev/null 2>&1; then
-    print_heading '🔎' 'launchd socktainer'
-    launchctl print "gui/$(id -u)/$socktainer_agent_label" || true
-    printf '\n'
-  fi
   print_heading '🔎' 'container machine inspect'
   status_container || true
 }
@@ -451,88 +440,6 @@ builder::inspect() {
 builder::ssh() {
   hb_init
   exec /usr/bin/ssh -F "$ssh_config" "$host_alias" "$@"
-}
-
-socktainer_disabled() {
-  print_error 'Socktainer is disabled'
-  exit 1
-}
-
-# @cmd Manage Socktainer
-socktainer() {
-  hb_init
-  socktainer::status
-}
-
-# @cmd Show Socktainer status
-socktainer::status() {
-  hb_init
-  local agent_kind=fail
-  local agent_text='not loaded'
-  local socket_kind=fail
-  local socket_text=missing
-  local ping_kind=fail
-  local ping_text=unreachable
-
-  if [ "$socktainer_enabled" != true ]; then
-    socktainer_disabled
-  fi
-
-  if launchctl print "gui/$(id -u)/$socktainer_agent_label" > /dev/null 2>&1; then
-    agent_kind=ok
-    agent_text=loaded
-  fi
-
-  if [ -S "$socktainer_socket" ]; then
-    socket_kind=ok
-    socket_text=present
-  fi
-
-  if "$socktainer_health" > /dev/null 2>&1; then
-    ping_kind=ok
-    ping_text=ready
-  fi
-
-  print_heading '🚢' 'Socktainer status'
-  print_state_row 'socktainer agent' "$agent_kind" "$agent_text"
-  print_state_row 'socktainer socket' "$socket_kind" "$socket_text"
-  print_state_row 'socktainer ping' "$ping_kind" "$ping_text"
-  print_state_row 'docker host' info "unix://$socktainer_socket"
-}
-
-socktainer_logs_impl() {
-  local follow="$1"
-
-  if [ "$socktainer_enabled" != true ]; then
-    socktainer_disabled
-  fi
-
-  if [ ! -f "$socktainer_err_log" ]; then
-    print_error "Log file not found: $socktainer_err_log"
-    exit 1
-  fi
-
-  if [ ! -f "$socktainer_out_log" ]; then
-    print_error "Log file not found: $socktainer_out_log"
-    exit 1
-  fi
-
-  if [ "$follow" -eq 1 ]; then
-    exec /usr/bin/tail -n 100 -f "$socktainer_err_log" "$socktainer_out_log"
-  else
-    print_heading '📜' 'socktainer stderr'
-    /usr/bin/tail -n 100 "$socktainer_err_log"
-    printf '\n'
-    print_heading '📜' 'socktainer stdout'
-    /usr/bin/tail -n 100 "$socktainer_out_log"
-  fi
-}
-
-# @cmd Show Socktainer logs
-# @flag -f --follow Follow log output
-socktainer::logs() {
-  hb_init
-  socktainer_logs_impl "${argc_follow:-0}"
 }
 
 # @cmd Run runtime and connectivity diagnostics
@@ -696,9 +603,8 @@ Helper CLI for nix-hex-box container-builder operations
 USAGE: hb <COMMAND>
 
 COMMANDS:
-  builder     Builder operations
-  socktainer  Manage Socktainer
-  doctor      Run runtime and connectivity diagnostics
+  builder  Builder operations
+  doctor   Run runtime and connectivity diagnostics
 EOF
   exit
 }
@@ -710,7 +616,7 @@ _argc_version() {
 
 _argc_parse() {
   local _argc_key _argc_action
-  local _argc_subcmds="builder, socktainer, doctor"
+  local _argc_subcmds="builder, doctor"
   while [[ $_argc_index -lt $_argc_len ]]; do
     _argc_item="${argc__args[_argc_index]}"
     _argc_key="${_argc_item%%=*}"
@@ -732,11 +638,6 @@ _argc_parse() {
         _argc_action=_argc_parse_builder
         break
         ;;
-      socktainer)
-        _argc_index=$((_argc_index + 1))
-        _argc_action=_argc_parse_socktainer
-        break
-        ;;
       doctor)
         _argc_index=$((_argc_index + 1))
         _argc_action=_argc_parse_doctor
@@ -747,9 +648,6 @@ _argc_parse() {
         case "$help_arg" in
           builder)
             _argc_usage_builder
-            ;;
-          socktainer)
-            _argc_usage_socktainer
             ;;
           doctor)
             _argc_usage_doctor
@@ -787,7 +685,7 @@ COMMANDS:
   repair   Verify builder health and recover runtime if needed
   reset    Destroy and recreate the builder machine
   gc       Run nix garbage collection inside the builder
-  inspect  Show raw launchd and container inspection data
+  inspect  Show raw container machine inspection data
   ssh      Open an SSH session to the builder
 EOF
   exit
@@ -1184,7 +1082,7 @@ _argc_parse_builder_gc() {
 
 _argc_usage_builder_inspect() {
   cat <<- 'EOF'
-Show raw launchd and container inspection data
+Show raw container machine inspection data
 
 USAGE: hb builder inspect
 EOF
@@ -1264,174 +1162,6 @@ _argc_parse_builder_ssh() {
     IFS=: read -r values_index values_size <<< "${_argc_match_positionals_values[0]:-}"
     if [[ -n $values_index ]]; then
       argc_args=("${argc__positionals[@]:values_index:values_size}")
-    fi
-  fi
-}
-
-_argc_usage_socktainer() {
-  cat <<- 'EOF'
-Manage Socktainer
-
-USAGE: hb socktainer <COMMAND>
-
-COMMANDS:
-  status  Show Socktainer status
-  logs    Show Socktainer logs
-EOF
-  exit
-}
-
-_argc_parse_socktainer() {
-  local _argc_key _argc_action
-  local _argc_subcmds="status, logs"
-  while [[ $_argc_index -lt $_argc_len ]]; do
-    _argc_item="${argc__args[_argc_index]}"
-    _argc_key="${_argc_item%%=*}"
-    case "$_argc_key" in
-      --help | -help | -h)
-        _argc_usage_socktainer
-        ;;
-      --)
-        _argc_dash="${#argc__positionals[@]}"
-        argc__positionals+=("${argc__args[@]:$((_argc_index + 1))}")
-        _argc_index=$_argc_len
-        break
-        ;;
-      status)
-        _argc_index=$((_argc_index + 1))
-        _argc_action=_argc_parse_socktainer_status
-        break
-        ;;
-      logs)
-        _argc_index=$((_argc_index + 1))
-        _argc_action=_argc_parse_socktainer_logs
-        break
-        ;;
-      help)
-        local help_arg="${argc__args[$((_argc_index + 1))]:-}"
-        case "$help_arg" in
-          status)
-            _argc_usage_socktainer_status
-            ;;
-          logs)
-            _argc_usage_socktainer_logs
-            ;;
-          "")
-            _argc_usage_socktainer
-            ;;
-          *)
-            _argc_die "error: invalid value \`$help_arg\` for \`<command>\`"$'\n'"  [possible values: $_argc_subcmds]"
-            ;;
-        esac
-        ;;
-      *)
-        _argc_die 'error: `hb-socktainer` requires a subcommand but one was not provided'$'\n'"  [subcommands: $_argc_subcmds]"
-        ;;
-    esac
-  done
-  if [[ -n ${_argc_action:-} ]]; then
-    $_argc_action
-  else
-    _argc_usage_socktainer
-  fi
-}
-
-_argc_usage_socktainer_status() {
-  cat <<- 'EOF'
-Show Socktainer status
-
-USAGE: hb socktainer status
-EOF
-  exit
-}
-
-_argc_parse_socktainer_status() {
-  local _argc_key _argc_action
-  local _argc_subcmds=""
-  while [[ $_argc_index -lt $_argc_len ]]; do
-    _argc_item="${argc__args[_argc_index]}"
-    _argc_key="${_argc_item%%=*}"
-    case "$_argc_key" in
-      --help | -help | -h)
-        _argc_usage_socktainer_status
-        ;;
-      --)
-        _argc_dash="${#argc__positionals[@]}"
-        argc__positionals+=("${argc__args[@]:$((_argc_index + 1))}")
-        _argc_index=$_argc_len
-        break
-        ;;
-      *)
-        argc__positionals+=("$_argc_item")
-        _argc_index=$((_argc_index + 1))
-        ;;
-    esac
-  done
-  if [[ -n ${_argc_action:-} ]]; then
-    $_argc_action
-  else
-    argc__fn=socktainer::status
-    if [[ ${argc__positionals[0]:-} == "help" ]] && [[ ${#argc__positionals[@]} -eq 1 ]]; then
-      _argc_usage_socktainer_status
-    fi
-  fi
-}
-
-_argc_usage_socktainer_logs() {
-  cat <<- 'EOF'
-Show Socktainer logs
-
-USAGE: hb socktainer logs [OPTIONS]
-
-OPTIONS:
-  -f, --follow  Follow log output
-  -h, --help    Print help
-EOF
-  exit
-}
-
-_argc_parse_socktainer_logs() {
-  local _argc_key _argc_action
-  local _argc_subcmds=""
-  while [[ $_argc_index -lt $_argc_len ]]; do
-    _argc_item="${argc__args[_argc_index]}"
-    _argc_key="${_argc_item%%=*}"
-    case "$_argc_key" in
-      --help | -help | -h)
-        _argc_usage_socktainer_logs
-        ;;
-      --)
-        _argc_dash="${#argc__positionals[@]}"
-        argc__positionals+=("${argc__args[@]:$((_argc_index + 1))}")
-        _argc_index=$_argc_len
-        break
-        ;;
-      --follow | -f)
-        if [[ $_argc_item == *=* ]]; then
-          _argc_die "error: flag \`--follow\` don't accept any value"
-        fi
-        _argc_index=$((_argc_index + 1))
-        if [[ -n ${argc_follow:-} ]]; then
-          _argc_die 'error: the argument `--follow` cannot be used multiple times'
-        else
-          argc_follow=1
-        fi
-        ;;
-      *)
-        if _argc_maybe_flag_option "-" "$_argc_item"; then
-          _argc_die "error: unexpected argument \`$_argc_key\` found"
-        fi
-        argc__positionals+=("$_argc_item")
-        _argc_index=$((_argc_index + 1))
-        ;;
-    esac
-  done
-  if [[ -n ${_argc_action:-} ]]; then
-    $_argc_action
-  else
-    argc__fn=socktainer::logs
-    if [[ ${argc__positionals[0]:-} == "help" ]] && [[ ${#argc__positionals[@]} -eq 1 ]]; then
-      _argc_usage_socktainer_logs
     fi
   fi
 }

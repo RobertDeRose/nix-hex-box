@@ -43,7 +43,6 @@ jobs:
           _hb
           printf '%s\n' "${COMPREPLY[@]}" | tee /tmp/hb-bash-top.txt
           grep -Fx builder /tmp/hb-bash-top.txt
-          grep -Fx socktainer /tmp/hb-bash-top.txt
           grep -Fx doctor /tmp/hb-bash-top.txt
 
           COMP_WORDS=(hb builder "")
@@ -87,34 +86,7 @@ jobs:
           '
 
           grep -Fx builder /tmp/hb-zsh-top.txt
-          grep -Fx socktainer /tmp/hb-zsh-top.txt
           grep -Fx doctor /tmp/hb-zsh-top.txt
-
-          COMPLETION_DIR="$completion_dir" zsh -fc '
-            autoload -U compinit
-            compinit -i
-            fpath=("$COMPLETION_DIR" $fpath)
-            autoload -U _hb
-            _describe() {
-              local spec="$2"
-              local -a values
-
-              if (( $# >= 2 )) && typeset -p -- "$spec" >/dev/null 2>&1; then
-                eval "values=(\"\${${spec}[@]}\")"
-                printf "%s\n" "${values[@]}"
-                return
-              fi
-
-              shift
-              printf "%s\n" "$@"
-            }
-
-            words=(hb sock)
-            CURRENT=2
-            _hb | tee /tmp/hb-zsh-top-sock.txt
-          '
-
-          grep -Fx socktainer /tmp/hb-zsh-top-sock.txt
 
           COMPLETION_DIR="$completion_dir" zsh -fc '
             autoload -U compinit
@@ -176,7 +148,6 @@ jobs:
         run: |
           fish -c 'source "assets/completions/hb.fish"; complete -C "hb "' | tee /tmp/hb-fish-top.txt
           grep -Fx builder /tmp/hb-fish-top.txt
-          grep -Fx socktainer /tmp/hb-fish-top.txt
           grep -Fx doctor /tmp/hb-fish-top.txt
 
           fish -c 'source "assets/completions/hb.fish"; complete -C "hb builder "' | tee /tmp/hb-fish-builder.txt

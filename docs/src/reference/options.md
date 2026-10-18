@@ -12,10 +12,8 @@ Important options:
 - `user`
 - `containerBinary`: defaults to `container`, resolved through PATH; accepts an
   explicit binary path. Lifecycle scripts preserve PATH when switching to the
-  runtime user and fall back to `/opt/homebrew/bin` and `/usr/local/bin`.
-- `installer.url`
-- `installer.hash`
-- `installer.version`
+  runtime user and fall back to `/opt/homebrew/bin`, `/usr/local/bin`, and the
+  runtime user's mise shims. A per-project mise install needs an absolute path.
 - `containerName`
 - `imageRepository`
 - `nixVersion`
@@ -36,13 +34,10 @@ Important options:
 - `idleShutdown.enable`
 - `idleShutdown.timeoutSeconds`
 - `cli.completions.enable`
-- `socktainer.enable`
-- `socktainer.binary`
-- `socktainer.homeDirectory`
-- `socktainer.setDockerHost`
-- `socktainer.installer.url`
-- `socktainer.installer.hash`
-- `socktainer.installer.version`
+
+The `installer.*` and `socktainer.*` options were removed. HexBox no longer
+installs Apple `container` or manages Socktainer, and setting them is an
+evaluation error.
 
 Machine notes:
 

@@ -8,8 +8,6 @@ services.container-builder = {
   cpus = 4;
   memory = "8G";
   maxJobs = 4;
-  # Optional Docker API compatibility layer:
-  # socktainer.enable = true;
 };
 ```
 
@@ -28,7 +26,6 @@ Common settings to review first:
 - `nixVersion`
 - `imageContainerfile`
 - `imageBuildContext`
-- `socktainer.enable`
 
 The default image is pulled from this repository's GitHub Container Registry
 package:

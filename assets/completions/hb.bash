@@ -1,5 +1,6 @@
 # Generated from scripts/hb.sh by scripts/generate-hb-assets.sh.
 # shellcheck shell=bash disable=SC2207
+# Complete hb commands, subcommands, and options for bash.
 _hb() {
   local cur prev cmd subcmd
 
@@ -15,7 +16,7 @@ _hb() {
 
   case "$cmd" in
     "")
-      COMPREPLY=($(compgen -W "builder socktainer doctor help --help -h --version -V" -- "$cur"))
+      COMPREPLY=($(compgen -W "builder doctor help --help -h --version -V" -- "$cur"))
       return 0
       ;;
     builder)
@@ -51,25 +52,6 @@ _hb() {
 
       return 0
       ;;
-    socktainer)
-      if [ "$COMP_CWORD" -eq 2 ]; then
-        COMPREPLY=($(compgen -W "status logs help" -- "$cur"))
-        return 0
-      fi
-
-      case "$subcmd" in
-        logs)
-          COMPREPLY=($(compgen -W "-f --follow -h --help" -- "$cur"))
-          return 0
-          ;;
-        help)
-          COMPREPLY=($(compgen -W "status logs" -- "$cur"))
-          return 0
-          ;;
-      esac
-
-      return 0
-      ;;
     doctor)
       if [ "$COMP_CWORD" -eq 2 ]; then
         COMPREPLY=($(compgen -W "runtime dns host help" -- "$cur"))
@@ -84,7 +66,7 @@ _hb() {
       return 0
       ;;
     help)
-      COMPREPLY=($(compgen -W "builder socktainer doctor" -- "$cur"))
+      COMPREPLY=($(compgen -W "builder doctor" -- "$cur"))
       return 0
       ;;
   esac
