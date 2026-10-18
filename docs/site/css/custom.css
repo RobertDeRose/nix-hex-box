@@ -1,106 +1,106 @@
-/* Matches the product page in site/styles.css: same fonts, colors, and light and
-   dark tokens. Docusaurus and the product page share the `theme` localStorage key
-   and the html[data-theme] attribute, so a theme chosen on one carries to the other. */
+/* Matches the product page in site/styles.css: the same Recursive type and the
+   same glass, slate, and trident-red tokens in both themes. Docusaurus and the
+   product page share the `theme` localStorage key and the html[data-theme]
+   attribute, so a theme chosen on one carries to the other. */
 
-@import '@fontsource-variable/archivo/wdth.css';
-@import '@fontsource/ibm-plex-mono/400.css';
-@import '@fontsource/ibm-plex-mono/500.css';
+@import '@fontsource-variable/recursive/full.css';
 
 :root {
-  --hb-ink: #1d2730;
-  --hb-hull: #56616b;
-  --hb-fog: #e8ebee;
-  --hb-paper: #f6f7f8;
-  --hb-rule: #c9cfd5;
-  --hb-red: #d8443a;
-  --hb-red-ink: #b3322a;
-  --hb-red-fill: #c0392f;
-  --hb-blue: #2563b8;
-  --hb-term-bg: #1a2128;
-  --hb-term-ink: #dfe5ea;
+  --hb-glass: #e6eff2;
+  --hb-frost: #f7fbfc;
+  --hb-slate: #22333b;
+  --hb-slate-2: #536770;
+  --hb-rule: #c3d3d9;
+  --hb-hex: #c8242b;
+  --hb-hex-ink: #a51d23;
+  --hb-bill: #6e5a93;
+  --hb-code-bg: #22333b;
 
-  --ifm-font-family-base: 'Archivo Variable', system-ui, sans-serif;
-  --ifm-heading-font-family: 'Archivo Variable', system-ui, sans-serif;
-  --ifm-font-family-monospace: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --hb-casual: 'CASL' 1, 'MONO' 0;
+  --hb-linear: 'CASL' 0, 'MONO' 0;
+  --hb-mono: 'CASL' 0, 'MONO' 1;
+
+  --ifm-font-family-base: 'Recursive Variable', ui-sans-serif, system-ui, sans-serif;
+  --ifm-heading-font-family: 'Recursive Variable', ui-sans-serif, system-ui, sans-serif;
+  --ifm-font-family-monospace: 'Recursive Variable', ui-monospace, monospace;
   --ifm-heading-font-weight: 800;
-  --ifm-code-font-size: 90%;
+  --ifm-code-font-size: 88%;
 
-  --ifm-background-color: var(--hb-fog);
-  --ifm-background-surface-color: var(--hb-paper);
-  --ifm-font-color-base: var(--hb-ink);
-  --ifm-heading-color: var(--hb-ink);
+  --ifm-background-color: var(--hb-glass);
+  --ifm-background-surface-color: var(--hb-frost);
+  --ifm-font-color-base: var(--hb-slate);
+  --ifm-heading-color: var(--hb-slate);
   --ifm-color-emphasis-300: var(--hb-rule);
   --ifm-toc-border-color: var(--hb-rule);
   --ifm-hr-background-color: var(--hb-rule);
   --ifm-table-border-color: var(--hb-rule);
 
-  /* Links and accents use the product page's blue; red marks the brand. */
-  --ifm-color-primary: var(--hb-blue);
-  --ifm-color-primary-dark: #2159a6;
-  --ifm-color-primary-darker: #1f549c;
-  --ifm-color-primary-darkest: #1a4581;
-  --ifm-color-primary-light: #296dca;
-  --ifm-color-primary-lighter: #2b72d4;
-  --ifm-color-primary-lightest: #4583da;
+  /* Links and accents use the trident's red, as on the product page. */
+  --ifm-color-primary: var(--hb-hex-ink);
+  --ifm-color-primary-dark: #951a20;
+  --ifm-color-primary-darker: #8c191e;
+  --ifm-color-primary-darkest: #741419;
+  --ifm-color-primary-light: #b52026;
+  --ifm-color-primary-lighter: #bf2128;
+  --ifm-color-primary-lightest: #d92f36;
 
-  --ifm-navbar-background-color: color-mix(in srgb, var(--hb-fog) 88%, transparent);
+  --ifm-navbar-background-color: color-mix(in srgb, var(--hb-glass) 90%, transparent);
   --ifm-navbar-shadow: none;
-  --ifm-footer-background-color: var(--hb-paper);
-  --ifm-footer-color: var(--hb-hull);
-  --ifm-footer-link-color: var(--hb-blue);
-  --ifm-footer-title-color: var(--hb-ink);
-  --ifm-code-background: color-mix(in srgb, var(--hb-ink) 7%, transparent);
+  --ifm-footer-background-color: var(--hb-glass);
+  --ifm-footer-color: var(--hb-slate-2);
+  --ifm-footer-link-color: var(--hb-hex-ink);
+  --ifm-footer-title-color: var(--hb-slate);
+  --ifm-code-background: transparent;
+  --ifm-code-padding-horizontal: 0;
   --docusaurus-highlighted-code-line-bg: rgb(255 255 255 / 0.08);
 }
 
 [data-theme='dark'] {
-  --hb-ink: #e3e8ec;
-  --hb-hull: #9aa5af;
-  --hb-fog: #161c22;
-  --hb-paper: #1e252c;
-  --hb-rule: #34404a;
-  --hb-red: #e65a4f;
-  --hb-red-ink: #ff8a80;
-  --hb-blue: #5b98e6;
-  --hb-term-bg: #0f1418;
+  --hb-glass: #1b2830;
+  --hb-frost: #22343d;
+  --hb-slate: #e3edf1;
+  --hb-slate-2: #9db2bb;
+  --hb-rule: #34494f;
+  --hb-hex: #f0565b;
+  --hb-hex-ink: #ff8589;
+  --hb-bill: #b7a6da;
+  --hb-code-bg: #111b20;
 
-  --ifm-color-primary: var(--hb-blue);
-  --ifm-color-primary-dark: #4189e2;
-  --ifm-color-primary-darker: #3482e0;
-  --ifm-color-primary-darkest: #1f6bc7;
-  --ifm-color-primary-light: #75a7ea;
-  --ifm-color-primary-lighter: #82afec;
-  --ifm-color-primary-lightest: #a9c8f2;
+  --ifm-color-primary: var(--hb-hex-ink);
+  --ifm-color-primary-dark: #ff6166;
+  --ifm-color-primary-darker: #ff4f55;
+  --ifm-color-primary-darkest: #ff1b22;
+  --ifm-color-primary-light: #ffa9ac;
+  --ifm-color-primary-lighter: #ffbbbd;
+  --ifm-color-primary-lightest: #ffeff0;
 }
 
 body {
-  font-variation-settings: 'wdth' 100;
+  font-variation-settings: var(--hb-linear);
   -webkit-font-smoothing: antialiased;
 }
 
-.navbar {
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--hb-rule);
+h1, h2, h3, h4, .navbar__title, .menu__link--sublist-caret, .pagination-nav__label {
+  font-variation-settings: var(--hb-casual);
 }
-.navbar__title {
-  font-weight: 700;
-  font-variation-settings: 'wdth' 115;
-  letter-spacing: -0.01em;
-}
+h1, h2, h3 { text-wrap: balance; }
+.markdown h1 { font-weight: 900; letter-spacing: -0.02em; }
 
-h1, h2, h3 { letter-spacing: -0.02em; text-wrap: balance; }
-.markdown h1 { font-variation-settings: 'wdth' 120; letter-spacing: -0.035em; }
-.markdown h2 { font-variation-settings: 'wdth' 112; }
+.navbar { backdrop-filter: blur(8px); border-bottom: 1px solid var(--hb-rule); }
+.navbar__title { font-weight: 800; }
 
-/* Code blocks look like the product page's terminal blocks in both themes.
+code, pre, kbd { font-variation-settings: var(--hb-mono); }
+:not(pre) > code { color: var(--hb-bill); border: 0; }
+
+/* Code blocks match the product page's slate blocks in both themes.
    Prism sets the background inline on the block and its <pre>, so only
    !important overrides it. */
-.theme-code-block { --prism-background-color: var(--hb-term-bg) !important; }
-.theme-code-block pre { background-color: var(--hb-term-bg) !important; }
+.theme-code-block { --prism-background-color: var(--hb-code-bg) !important; }
+.theme-code-block pre { background-color: var(--hb-code-bg) !important; }
 
 /* Home is the product page: same site, not an external link. */
 .navbar__link[href="https://robertderose.github.io/nix-hex-box/"] svg,
 .footer__link-item[href="https://robertderose.github.io/nix-hex-box/"] svg { display: none; }
 
 .footer { border-top: 1px solid var(--hb-rule); }
-.footer__copyright { font-size: 0.9rem; }
+.footer__copyright { font-size: 0.875rem; }

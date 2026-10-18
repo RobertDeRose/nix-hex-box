@@ -8,7 +8,7 @@ const siteRoot = 'https://robertderose.github.io/nix-hex-box/';
 
 const config: Config = {
   title: 'HexBox',
-  tagline: 'A Linux builder for Nix on your Mac',
+  tagline: 'A Linux builder for Nix that lives in a box on your Mac',
   favicon: 'img/favicon.png',
   url: 'https://robertderose.github.io',
   baseUrl: '/nix-hex-box/docs/',

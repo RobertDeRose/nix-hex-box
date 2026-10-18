@@ -1,18 +1,7 @@
-// Hero load sequence: each terminal line prints in turn, and the matching
-// pipeline stage lands as the build reaches it.
-(() => {
-  const root = document.documentElement;
-  const lines = document.querySelectorAll('.term .ln');
-  lines.forEach((line, i) => {
-    line.style.setProperty('--i', i);
-    const box = line.dataset.box && document.querySelector(`.box[data-box="${line.dataset.box}"]`);
-    if (box) box.style.setProperty('--i', i);
-  });
-  root.classList.add('js');
-  requestAnimationFrame(() => root.classList.add('play'));
-})();
+document.documentElement.classList.add('js');
 
 // Theme toggle: follows the system until clicked, then remembers the choice.
+// The docs read and write the same `theme` key.
 (() => {
   const root = document.documentElement;
   const button = document.querySelector('.theme-toggle');
@@ -33,31 +22,7 @@
   show();
 })();
 
-// GitHub star count beside the header link, shown only once it is worth showing.
-(() => {
-  const MIN_STARS = 100;
-  const repo = 'RobertDeRose/nix-hex-box';
-  const badge = document.querySelector('.gh-stars');
-  const show = (count) => {
-    if (!(count >= MIN_STARS)) return;
-    badge.querySelector('.gh-count').textContent = new Intl.NumberFormat('en', { notation: 'compact' }).format(count);
-    badge.hidden = false;
-  };
-  // Cache for the session: the unauthenticated API allows 60 requests an hour per visitor.
-  try {
-    const cached = sessionStorage.getItem('stars');
-    if (cached !== null) return show(Number(cached));
-  } catch {}
-  fetch(`https://api.github.com/repos/${repo}`)
-    .then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
-    .then(({ stargazers_count: count }) => {
-      try { sessionStorage.setItem('stars', count); } catch {}
-      show(count);
-    })
-    .catch(() => {});
-})();
-
-// Copy buttons copy the command next to them.
+// Copy buttons copy the code next to them.
 document.addEventListener('click', async (event) => {
   const button = event.target.closest('.copy');
   if (!button) return;
@@ -79,7 +44,7 @@ document.addEventListener('click', async (event) => {
   }, 1600);
 });
 
-// Tab sets (install routes), each with arrow-key navigation.
+// Install tabs, with arrow-key navigation.
 document.querySelectorAll('.tabs').forEach((set) => {
   const tabs = [...set.querySelectorAll('[role="tab"]')];
   const select = (tab) => {
