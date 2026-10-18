@@ -31,8 +31,7 @@ jobs:
           install: false
       - name: Install lint tools
         run: |
-          mise plugin install nix https://github.com/jbadeau/mise-nix.git
-          mise install hk actionlint hadolint pkl shellcheck shfmt tombi typos nix:nixfmt
+          mise install hk actionlint hadolint pkl shellcheck shfmt tombi typos aqua:Mic92/nixfmt-rs
       - name: Run hk across entire repo
         run: hk check -a
       - name: Test container machine lifecycle helpers
