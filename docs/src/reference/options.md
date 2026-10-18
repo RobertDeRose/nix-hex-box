@@ -12,7 +12,8 @@ Important options:
 - `user`
 - `containerBinary`: defaults to `container`, resolved through PATH; accepts an
   explicit binary path. Lifecycle scripts preserve PATH when switching to the
-  runtime user and fall back to `/opt/homebrew/bin` and `/usr/local/bin`.
+  runtime user and fall back to `/opt/homebrew/bin`, `/usr/local/bin`, and the
+  runtime user's mise shims. A per-project mise install needs an absolute path.
 - `containerName`
 - `imageRepository`
 - `nixVersion`

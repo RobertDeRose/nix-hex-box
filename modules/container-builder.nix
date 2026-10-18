@@ -23,12 +23,31 @@ let
   # Keep the caller's selection first; background services may have a minimal PATH.
   containerCommand = pkgs.writeShellScript "hexbox-container" ''
     set -euo pipefail
-    export PATH="''${PATH:+$PATH:}/opt/homebrew/bin:/usr/local/bin"
-    if ! command -v ${escapeShellArg cfg.containerBinary} >/dev/null 2>&1; then
+    fallback_path="''${PATH:+$PATH:}/opt/homebrew/bin:/usr/local/bin"
+    search_path="$fallback_path:"${escapeShellArg "/Users/${owner}/.local/share/mise/shims"}
+    container_bin=${escapeShellArg cfg.containerBinary}
+
+    if [ "$(/usr/bin/id -u)" -eq 0 ] && [ "''${container_bin#/}" = "$container_bin" ]; then
+      # mise shims need the owner's HOME, so resolve the real binary as the owner.
+      resolved=$(/usr/bin/sudo -n -u ${escapeShellArg owner} -H /usr/bin/env PATH="$search_path" /bin/sh -c '
+        cd / || exit 0
+        bin=$(command -v "$1") || exit 0
+        case "$bin" in
+          */mise/shims/*) "$(/usr/bin/readlink -f "$bin")" which "$1" ;;
+          *) printf "%s\n" "$bin" ;;
+        esac
+      ' sh "$container_bin") || resolved=
+      container_bin=''${resolved:-$container_bin}
+      export PATH="$fallback_path"
+    else
+      export PATH="$search_path"
+    fi
+
+    if ! command -v "$container_bin" >/dev/null 2>&1; then
       echo ${escapeShellArg "hexbox: `${cfg.containerBinary}` not found on PATH. Install Apple container (Homebrew, mise, or https://github.com/apple/container/releases) or set services.container-builder.containerBinary."} >&2
       exit 127
     fi
-    exec ${escapeShellArg cfg.containerBinary} "$@"
+    exec "$container_bin" "$@"
   '';
   hostContainerInternalDomain = "host.container.internal";
   hostContainerInternalLoopback = "203.0.113.113";

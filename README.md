@@ -156,9 +156,15 @@ services.container-builder = {
 The helper runs `container` from your shell's `PATH`, so it uses the host CLI
 selected by Homebrew, mise, or Apple's installer. Lifecycle scripts also resolve
 `container` through PATH by default and preserve it when switching to the runtime
-user. Background calls fall back to `/opt/homebrew/bin` and `/usr/local/bin`;
-ensure mise is on their PATH if using mise there. Set
-`services.container-builder.containerBinary` to override the command explicitly.
+user. Background calls fall back to `/opt/homebrew/bin`, `/usr/local/bin`, and
+the runtime user's mise shims. Set `services.container-builder.containerBinary`
+to override the command explicitly.
+
+If you install `container` with mise, install it globally
+(`mise use -g container`) so background calls resolve the same version from
+any directory. A per-project mise install is not visible to nix-daemon or
+activation; set `containerBinary` to its absolute path instead, for example the
+output of `mise which container`.
 
 After activation, use:
 
