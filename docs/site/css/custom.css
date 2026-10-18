@@ -1,0 +1,106 @@
+/* Matches the product page in site/styles.css: same fonts, colors, and light and
+   dark tokens. Docusaurus and the product page share the `theme` localStorage key
+   and the html[data-theme] attribute, so a theme chosen on one carries to the other. */
+
+@import '@fontsource-variable/archivo/wdth.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+
+:root {
+  --hb-ink: #1d2730;
+  --hb-hull: #56616b;
+  --hb-fog: #e8ebee;
+  --hb-paper: #f6f7f8;
+  --hb-rule: #c9cfd5;
+  --hb-red: #d8443a;
+  --hb-red-ink: #b3322a;
+  --hb-red-fill: #c0392f;
+  --hb-blue: #2563b8;
+  --hb-term-bg: #1a2128;
+  --hb-term-ink: #dfe5ea;
+
+  --ifm-font-family-base: 'Archivo Variable', system-ui, sans-serif;
+  --ifm-heading-font-family: 'Archivo Variable', system-ui, sans-serif;
+  --ifm-font-family-monospace: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --ifm-heading-font-weight: 800;
+  --ifm-code-font-size: 90%;
+
+  --ifm-background-color: var(--hb-fog);
+  --ifm-background-surface-color: var(--hb-paper);
+  --ifm-font-color-base: var(--hb-ink);
+  --ifm-heading-color: var(--hb-ink);
+  --ifm-color-emphasis-300: var(--hb-rule);
+  --ifm-toc-border-color: var(--hb-rule);
+  --ifm-hr-background-color: var(--hb-rule);
+  --ifm-table-border-color: var(--hb-rule);
+
+  /* Links and accents use the product page's blue; red marks the brand. */
+  --ifm-color-primary: var(--hb-blue);
+  --ifm-color-primary-dark: #2159a6;
+  --ifm-color-primary-darker: #1f549c;
+  --ifm-color-primary-darkest: #1a4581;
+  --ifm-color-primary-light: #296dca;
+  --ifm-color-primary-lighter: #2b72d4;
+  --ifm-color-primary-lightest: #4583da;
+
+  --ifm-navbar-background-color: color-mix(in srgb, var(--hb-fog) 88%, transparent);
+  --ifm-navbar-shadow: none;
+  --ifm-footer-background-color: var(--hb-paper);
+  --ifm-footer-color: var(--hb-hull);
+  --ifm-footer-link-color: var(--hb-blue);
+  --ifm-footer-title-color: var(--hb-ink);
+  --ifm-code-background: color-mix(in srgb, var(--hb-ink) 7%, transparent);
+  --docusaurus-highlighted-code-line-bg: rgb(255 255 255 / 0.08);
+}
+
+[data-theme='dark'] {
+  --hb-ink: #e3e8ec;
+  --hb-hull: #9aa5af;
+  --hb-fog: #161c22;
+  --hb-paper: #1e252c;
+  --hb-rule: #34404a;
+  --hb-red: #e65a4f;
+  --hb-red-ink: #ff8a80;
+  --hb-blue: #5b98e6;
+  --hb-term-bg: #0f1418;
+
+  --ifm-color-primary: var(--hb-blue);
+  --ifm-color-primary-dark: #4189e2;
+  --ifm-color-primary-darker: #3482e0;
+  --ifm-color-primary-darkest: #1f6bc7;
+  --ifm-color-primary-light: #75a7ea;
+  --ifm-color-primary-lighter: #82afec;
+  --ifm-color-primary-lightest: #a9c8f2;
+}
+
+body {
+  font-variation-settings: 'wdth' 100;
+  -webkit-font-smoothing: antialiased;
+}
+
+.navbar {
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--hb-rule);
+}
+.navbar__title {
+  font-weight: 700;
+  font-variation-settings: 'wdth' 115;
+  letter-spacing: -0.01em;
+}
+
+h1, h2, h3 { letter-spacing: -0.02em; text-wrap: balance; }
+.markdown h1 { font-variation-settings: 'wdth' 120; letter-spacing: -0.035em; }
+.markdown h2 { font-variation-settings: 'wdth' 112; }
+
+/* Code blocks look like the product page's terminal blocks in both themes.
+   Prism sets the background inline on the block and its <pre>, so only
+   !important overrides it. */
+.theme-code-block { --prism-background-color: var(--hb-term-bg) !important; }
+.theme-code-block pre { background-color: var(--hb-term-bg) !important; }
+
+/* Home is the product page: same site, not an external link. */
+.navbar__link[href="https://robertderose.github.io/nix-hex-box/"] svg,
+.footer__link-item[href="https://robertderose.github.io/nix-hex-box/"] svg { display: none; }
+
+.footer { border-top: 1px solid var(--hb-rule); }
+.footer__copyright { font-size: 0.9rem; }

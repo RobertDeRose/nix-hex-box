@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HexBox</title>
+<meta name="description" content="A nix-darwin module that gives your Mac an aarch64-linux Nix remote builder, running in an Apple container machine that starts when a build needs it and powers off when idle.">
+<link rel="canonical" href="https://robertderose.github.io/nix-hex-box/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://robertderose.github.io/nix-hex-box/">
+<meta property="og:title" content="HexBox">
+<meta property="og:description" content="A Linux builder for Nix on your Mac, running in an Apple container machine.">
+<meta property="og:image" content="https://robertderose.github.io/nix-hex-box/assets/icon.png">
+<meta property="og:image:alt" content="The HexBox mascot: a platypus in devil horns holding a trident, inside a glass box.">
+<meta name="twitter:card" content="summary">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script>
+  // Apply a saved theme before first paint; otherwise the system setting applies.
+  try {
+    const theme = localStorage.getItem('theme');
+    if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+  } catch {}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="brand" href="#">
+      <img src="assets/favicon.png" alt="" width="32" height="32">
+      <span>HexBox</span>
+    </a>
+    <nav aria-label="Primary">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#install">Install</a>
+      <a href="docs/">Docs</a>
+      <a class="nav-gh" href="https://github.com/RobertDeRose/nix-hex-box">GitHub<span class="gh-stars" hidden> <span aria-hidden="true">★</span> <span class="gh-count"></span><span class="sr"> stars</span></span></a>
+    </nav>
+    <button type="button" class="theme-toggle" aria-label="Switch to dark theme">
+      <svg class="i-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      <svg class="i-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <h1>A Linux builder for Nix on your&nbsp;Mac.</h1>
+      <p class="lede">HexBox is a <code>nix-darwin</code> module that adds an <code>aarch64-linux</code> remote builder, running in an Apple <code>container</code> machine. It starts when a build needs it and powers off when it goes idle.</p>
+      <div class="cta">
+        <div class="cmd" data-copy='inputs.hexbox.url = "github:RobertDeRose/nix-hex-box";'>
+          <code>inputs.hexbox.url = <wbr><span class="nowrap">"github:RobertDeRose/nix-hex-box";</span></code>
+          <button type="button" class="copy" aria-label="Copy flake input">Copy</button>
+        </div>
+        <p class="cta-links"><a href="#install">Set it up</a> <a href="docs/">Read the docs</a> <a href="https://github.com/RobertDeRose/nix-hex-box">View the source</a></p>
+      </div>
+      <p class="fine">For nix-darwin on Apple silicon. Bring your own <code>container</code> from Homebrew, mise, or Apple’s installer.</p>
+    </div>
+
+    <figure class="term" aria-label="Example terminal session">
+      <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>~</span></div>
+      <pre class="term-body"><code><span class="ln" data-box="daemon"><span class="prompt">$</span> nix build nixpkgs#legacyPackages.aarch64-linux.hello</span>
+<span class="ln dim" data-box="ssh">building '/nix/store/…-hello-2.12.2.drv' on</span>
+<span class="ln dim">  'ssh-ng://builder@container-builder'...</span>
+<span class="ln" data-box="vm"> <b class="ok">✔</b> hello-2.12.2  <em>built on nix-builder</em></span>
+<span class="ln dim" data-box="store">copying path '/nix/store/…-hello-2.12.2' from</span>
+<span class="ln dim">  'ssh-ng://builder@container-builder'...</span>
+<span class="ln"><span class="prompt">$</span> file result/bin/hello</span>
+<span class="ln">ELF 64-bit LSB executable, ARM aarch64</span></code></pre>
+    </figure>
+  </div>
+
+  <div class="yard" aria-hidden="true">
+    <div class="wrap yard-row">
+      <div class="box c-steel" data-box="daemon"><span>nix-daemon</span><small>on your Mac</small></div>
+      <div class="box c-light" data-box="ssh"><span>ssh-ng</span><small>ProxyCommand</small></div>
+      <div class="box c-red" data-box="vm"><span>nix-builder</span><small>aarch64-linux machine</small></div>
+      <div class="box c-blue" data-box="store"><span>/nix/store</span><small>results copied back</small></div>
+    </div>
+  </div>
+</section>
+
+<section id="features" class="section">
+  <div class="wrap">
+    <h2>A Linux builder that stays out of your way.</h2>
+    <p class="intro">Enable one module and Nix on your Mac can build <code>aarch64-linux</code> derivations. HexBox handles the machine, SSH, keys, and recovery, so the builder feels like part of Nix.</p>
+
+    <div class="leads">
+      <article class="lead">
+        <h3>One option to turn it on</h3>
+        <p>HexBox sets up <code>nix.buildMachines</code>, SSH aliases, host keys, and a persistent builder machine. Linux derivations go to it automatically.</p>
+        <pre><code>services.container-builder = {
+  enable = true;
+};</code></pre>
+      </article>
+      <article class="lead">
+        <h3>Starts when a build needs it</h3>
+        <p>An SSH <code>ProxyCommand</code> boots the machine on demand and relays straight to the guest’s <code>sshd</code>, so a changing machine IP never breaks Nix.</p>
+        <pre><code>nix build .#packages.aarch64-linux.default</code></pre>
+      </article>
+      <article class="lead">
+        <h3>Powers off when it’s idle</h3>
+        <p>With no SSH connections for five minutes, the guest shuts down. Its <code>/nix</code> store survives, so the next build reuses what it already has.</p>
+        <pre><code>idleShutdown.timeoutSeconds = 300;</code></pre>
+      </article>
+    </div>
+
+    <dl class="more">
+      <div>
+        <dt>Your <code>container</code>, your choice</dt>
+        <dd>Install Apple’s <code>container</code> with Homebrew, mise, or Apple’s pkg. HexBox finds it on <code>PATH</code>, including from the root <code>nix-daemon</code>.</dd>
+      </div>
+      <div>
+        <dt>A small, current builder image</dt>
+        <dd>The default image is Alpine with OpenSSH, sudo, and Lix, rebuilt weekly so security updates reach new machines. Pin a versioned tag if you prefer.</dd>
+      </div>
+      <div>
+        <dt>Or build your own image</dt>
+        <dd>Point <code>imageContainerfile</code> at a Containerfile and HexBox builds a local image and uses it instead.</dd>
+      </div>
+      <div>
+        <dt>Verified SSH, not trust-on-first-use</dt>
+        <dd>HexBox generates the builder’s host key and a matching <code>known_hosts</code>, so every connection is checked.</dd>
+      </div>
+      <div>
+        <dt><code>host.container.internal</code> for your containers</dt>
+        <dd>By default, Apple containers can reach services on your Mac at <code>host.container.internal</code>.</dd>
+      </div>
+      <div>
+        <dt>A helper for when things go wrong</dt>
+        <dd>The <code>hb</code> command shows status, repairs the runtime and machine, tails logs, and runs a real remote build to prove it works.</dd>
+      </div>
+    </dl>
+  </div>
+</section>
+
+<div class="corrugate" aria-hidden="true"></div>
+
+<section id="how" class="section">
+  <div class="wrap how-grid">
+    <div>
+      <h2>How a build runs</h2>
+      <p class="intro">Nothing new to learn: Nix uses an ordinary <code>ssh-ng</code> remote builder. HexBox makes the far end of that SSH connection a machine that is always ready to boot.</p>
+      <ol class="steps">
+        <li>Nix sees an <code>aarch64-linux</code> derivation and picks the <code>container-builder</code> remote builder.</li>
+        <li>The root <code>nix-daemon</code> opens SSH, whose <code>ProxyCommand</code> switches to your user, who owns the <code>container</code> runtime.</li>
+        <li>The proxy starts the <code>nix-builder</code> machine if it isn’t running and waits for a real SSH handshake.</li>
+        <li>It relays the connection with <code>socat</code> to <code>sshd</code> inside the machine.</li>
+        <li>Nix logs in as <code>builder</code> and runs the remote <code>nix-daemon</code> through a narrow sudo rule.</li>
+        <li>The build runs in the guest, and its outputs are copied back to your Mac’s store.</li>
+        <li>After the idle timeout with no SSH sessions, the guest powers itself off.</li>
+      </ol>
+    </div>
+
+    <figure class="diagram" aria-label="Your Mac's nix-daemon connects over SSH through a ProxyCommand to a Linux machine named nix-builder, which runs sshd, nix-daemon, and a persistent Nix store.">
+      <div class="d-host">
+        <p class="d-title">Your Mac</p>
+        <div class="d-row">
+          <div class="d-chip">Terminal<br><code>nix build</code></div>
+          <div class="d-chip">nix-daemon<br><code>buildMachines</code></div>
+          <div class="d-chip">SSH<br><code>ProxyCommand</code></div>
+        </div>
+        <div class="d-link" aria-hidden="true"><span><code>container machine run</code> + <code>socat</code></span></div>
+        <div class="d-vm">
+          <p class="d-title">Linux machine <code>nix-builder</code></p>
+          <div class="d-row">
+            <div class="d-chip solid">sshd</div>
+            <div class="d-chip solid">nix-daemon</div>
+            <div class="d-chip solid">Lix</div>
+          </div>
+          <p class="d-note">Persistent <code>/nix</code> store, kept across stops and starts</p>
+        </div>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<section id="fit" class="section compare">
+  <div class="wrap">
+    <h2>Is HexBox for you?</h2>
+    <div class="fit">
+      <div>
+        <h3>Use HexBox if</h3>
+        <ul>
+          <li>You manage your Mac with <code>nix-darwin</code> and need to build <code>aarch64-linux</code> derivations.</li>
+          <li>You already use, or want to use, Apple’s <code>container</code>.</li>
+          <li>You want a builder that costs nothing while you aren’t building.</li>
+          <li>You want build results that survive restarts without a remote server.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Look elsewhere if</h3>
+        <ul>
+          <li>You need <code>x86_64-linux</code> builds; the guest is always <code>aarch64-linux</code>.</li>
+          <li>You’re on an Intel Mac, or don’t use <code>nix-darwin</code>.</li>
+          <li>You need NixOS VM tests at speed: Macs before M3 lack nested virtualization, so they run under emulation.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="corrugate" aria-hidden="true"></div>
+
+<section id="install" class="section">
+  <div class="wrap">
+    <h2>Install</h2>
+    <p class="intro">Three steps: install Apple’s <code>container</code>, add HexBox to your <code>nix-darwin</code> flake, then switch.</p>
+
+    <h3 class="step-title"><span>1</span> Install <code>container</code></h3>
+    <div class="tabs">
+      <div class="tablist" role="tablist" aria-label="Install method">
+        <button type="button" role="tab" id="t-brew" aria-controls="p-brew" aria-selected="true">Homebrew</button>
+        <button type="button" role="tab" id="t-mise" aria-controls="p-mise" aria-selected="false" tabindex="-1">mise</button>
+        <button type="button" role="tab" id="t-pkg" aria-controls="p-pkg" aria-selected="false" tabindex="-1">Apple’s installer</button>
+      </div>
+
+      <div class="panel" role="tabpanel" id="p-brew" aria-labelledby="t-brew" tabindex="0">
+        <h3 class="no-js">Homebrew</h3>
+        <pre class="block"><button type="button" class="copy">Copy</button><code>brew install container
+container system start</code></pre>
+      </div>
+
+      <div class="panel" role="tabpanel" id="p-mise" aria-labelledby="t-mise" tabindex="0">
+        <h3 class="no-js">mise</h3>
+        <p>Install it globally. The root <code>nix-daemon</code> can’t see a per-project mise install, so for one of those set <code>containerBinary</code> to the path <code>mise which container</code> prints.</p>
+        <pre class="block"><button type="button" class="copy">Copy</button><code>mise use -g container
+container system start</code></pre>
+      </div>
+
+      <div class="panel" role="tabpanel" id="p-pkg" aria-labelledby="t-pkg" tabindex="0">
+        <h3 class="no-js">Apple’s installer</h3>
+        <p>Apple’s signed package installs under <code>/usr/local</code>, so the installer asks for your password.</p>
+        <pre class="block"><button type="button" class="copy">Copy</button><code>gh release download --repo apple/container --pattern 'container-*-installer-signed.pkg'
+sudo installer -pkg container-*-installer-signed.pkg -target /
+container system start</code></pre>
+      </div>
+    </div>
+
+    <h3 class="step-title"><span>2</span> Add the module</h3>
+    <pre class="block"><button type="button" class="copy">Copy</button><code>{
+  inputs.hexbox.url = "github:RobertDeRose/nix-hex-box";
+
+  outputs = inputs: {
+    darwinConfigurations.my-host = inputs.darwin.lib.darwinSystem {
+      system = "aarch64-darwin";
+      modules = [
+        inputs.hexbox.darwinModules.default
+        {
+          services.container-builder = {
+            enable = true;
+            cpus = 4;
+            memory = "8G";
+          };
+        }
+      ];
+    };
+  };
+}</code></pre>
+
+    <h3 class="step-title"><span>3</span> Switch and test</h3>
+    <pre class="block"><button type="button" class="copy">Copy</button><code>sudo darwin-rebuild switch --flake .#my-host
+hb builder test</code></pre>
+    <p class="after">The first build pulls the builder image and creates the machine, so it takes longer. After that, the machine boots in seconds when a build needs it.</p>
+
+    <details class="limits">
+      <summary>Good to know before you start</summary>
+      <ul>
+        <li>The guest is <code>aarch64-linux</code> only.</li>
+        <li>The builder machine defaults to 4 CPUs and 1 GB of memory. Raise <code>memory</code> for anything heavier than small packages.</li>
+        <li><code>hb builder reset</code> recreates the machine, which deletes the guest’s <code>/nix</code> store. Changing the image does the same.</li>
+        <li>Custom images must provide <code>socat</code>, <code>base64</code>, <code>getent</code>, and a working <code>/sbin/init</code>.</li>
+        <li>Setting a removed option, such as <code>installer.*</code> or <code>socktainer.*</code>, fails evaluation with a message saying what to do.</li>
+      </ul>
+    </details>
+  </div>
+</section>
+
+<section id="hb" class="section">
+  <div class="wrap">
+    <h2>Check on it with <code>hb</code></h2>
+    <p class="intro">HexBox installs a small helper. Most of the time you never need it; when something breaks, it tells you what and how to fix it.</p>
+    <div class="hb-grid">
+      <pre class="block"><code><span class="prompt">$</span> hb builder status
+🔨 Builder status
+container system   ✅ running
+builder machine    ✅ running
+ssh handshake      ✅ ready
+remote store       ✅ reachable</code></pre>
+      <dl class="cmds">
+        <div><dt><code>hb builder status</code></dt><dd>Runtime, machine, SSH, and remote store at a glance.</dd></div>
+        <div><dt><code>hb builder repair</code></dt><dd>Restarts the runtime, recreates or updates the machine, and checks SSH and networking.</dd></div>
+        <div><dt><code>hb builder test</code></dt><dd>Runs a real remote build to prove the whole path works.</dd></div>
+        <div><dt><code>hb builder logs boot</code></dt><dd>Boot, readiness, and idle-shutdown logs.</dd></div>
+        <div><dt><code>hb doctor</code></dt><dd>Diagnoses the runtime, DNS, and host setup.</dd></div>
+      </dl>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-inner">
+    <img src="assets/icon.png" alt="" width="72" height="72">
+    <div>
+      <p><a href="docs/">Documentation</a> <a href="docs/reference/options">Options</a> <a href="docs/operations/troubleshooting">Troubleshooting</a> <a href="https://github.com/RobertDeRose/nix-hex-box">Source</a> <a href="https://github.com/RobertDeRose/nix-hex-box/releases">Releases</a></p>
+      <p class="fine">Not maintained or endorsed by Apple or the NixOS project.</p>
+      <p class="fine made">Made with <span class="heart" role="img" aria-label="love">♥️</span> by <a href="https://github.com/RobertDeRose">Robert DeRose</a></p>
+    </div>
+  </div>
+</footer>
+
+<p class="sr" id="copy-status" aria-live="polite"></p>
+<script src="site.js"></script>
+</body>
+</html>

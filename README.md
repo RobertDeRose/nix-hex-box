@@ -7,9 +7,13 @@
 `nix-hex-box` is a `nix-darwin` module that configures an Apple
 `container machine` backed `aarch64-linux` remote builder for Nix.
 
-Documentation site:
+- Product site: <https://robertderose.github.io/nix-hex-box/>
+- Documentation: <https://robertderose.github.io/nix-hex-box/docs/>
 
-- <https://robertderose.github.io/nix-hex-box/>
+The product page lives in `site/` as static HTML. The documentation is a
+Docusaurus site built from `docs/src`. `mise run pages:build` assembles both
+into `_site/` the way GitHub Pages publishes them, and `mise run pages:serve`
+previews the result locally.
 
 Current design highlights:
 
