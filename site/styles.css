@@ -158,7 +158,8 @@ html:not(.js) .theme-toggle { display: none; }
   isolation: isolate;
 }
 .case img { position: relative; z-index: 1; filter: drop-shadow(0 26px 22px rgb(15 24 29 / 0.28)); }
-/* The page's one moment of motion: light sweeps once across the glass. */
+/* The page's one moment of motion: light sweeps across the glass on load,
+   then again once a minute. */
 .case::before {
   content: "";
   position: absolute; inset: 4% 6% 10%;
@@ -170,10 +171,12 @@ html:not(.js) .theme-toggle { display: none; }
   mix-blend-mode: soft-light;
   opacity: 0;
 }
-.js .case::before { animation: sheen 1.6s 0.35s ease-out forwards; }
+/* Each 60s cycle spends its first 1.6s (2.7%) sweeping, then rests out of view. */
+.js .case::before { animation: sheen 60s 0.35s infinite; }
 @keyframes sheen {
-  0% { opacity: 1; background-position: 120% 0; }
-  100% { opacity: 1; background-position: -20% 0; }
+  0% { opacity: 1; background-position: 120% 0; animation-timing-function: ease-out; }
+  2.7% { opacity: 1; background-position: -20% 0; }
+  2.71%, 100% { opacity: 0; background-position: -20% 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
