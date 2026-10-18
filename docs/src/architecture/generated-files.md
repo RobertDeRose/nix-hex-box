@@ -6,7 +6,7 @@ them by hand; change your configuration instead.
 
 ## Keys
 
-These are created once by `bootstrap-keys.sh` and never overwritten:
+The first switch creates these, and later switches never overwrite them:
 
 | File | What it is |
 |---|---|
@@ -15,14 +15,14 @@ These are created once by `bootstrap-keys.sh` and never overwritten:
 | `known_hosts` | Lets SSH check it's talking to your builder |
 
 Deleting the keys locks your Mac out of the builder. If you need new keys,
-delete them, run `bootstrap-keys.sh` again, and then `hb builder reset`, so
-the machine is recreated with the new keys.
+delete them, switch again to create new ones, and then run `hb builder reset`,
+so the machine is recreated with the new keys.
 
 ## Scripts
 
 | File | What it does |
 |---|---|
-| `bootstrap-keys.sh` | Creates the keys above |
+| `bootstrap-keys.sh` | Creates any missing keys above; each switch runs it |
 | `start-container.sh` | Starts the builder, creating or updating it as needed |
 | `stop-container.sh` | Stops the builder |
 | `reset-container.sh` | Deletes the builder and creates a fresh one |

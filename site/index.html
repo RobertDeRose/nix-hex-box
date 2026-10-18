@@ -184,10 +184,9 @@ container system start</code></pre>
       <li>
         <h3>Switch, then try a build</h3>
         <pre class="block"><button type="button" class="copy">Copy</button><code>sudo darwin-rebuild switch --flake .#my-host
-~/.local/state/hb/bootstrap-keys.sh
 hb builder repair
 hb builder test</code></pre>
-        <p class="note"><code>bootstrap-keys.sh</code> creates the builder’s SSH keys, and you only run it once. The first <code>hb builder repair</code> downloads the image and creates the machine, so it takes a few minutes. After that, the box wakes in seconds.</p>
+        <p class="note">The switch creates the builder’s SSH keys. The first <code>hb builder repair</code> downloads the image and creates the machine, so it takes a few minutes. After that, the box wakes in seconds.</p>
       </li>
     </ol>
   </div>

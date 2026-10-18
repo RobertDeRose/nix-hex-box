@@ -15,13 +15,16 @@ Nix daemon doesn't look. HexBox checks your `PATH`, `/opt/homebrew/bin`,
 globally (`mise use -g container`). Otherwise, set `containerBinary` to the
 command's full path.
 
-## "container-builder keys are missing" during a switch
+## "could not create the builder's SSH keys" during a switch
 
-You haven't created the builder's SSH keys yet. Run this once:
+Each switch creates the builder's SSH keys if they're missing, and this one
+couldn't. Run the key script yourself to see the error:
 
 ```bash
 ~/.local/state/hb/bootstrap-keys.sh
 ```
+
+The usual cause is that HexBox can't write to `~/.local/state/hb`.
 
 ## Builds fail with "platform mismatch" or "local builds are disabled"
 
