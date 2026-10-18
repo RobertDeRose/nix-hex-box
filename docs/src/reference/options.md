@@ -33,15 +33,10 @@ Important options:
 - `idleShutdown.enable`
 - `idleShutdown.timeoutSeconds`
 - `cli.completions.enable`
-- `socktainer.enable`
-- `socktainer.binary`: defaults to `socktainer`, resolved through PATH; accepts
-  an explicit binary path. Falls back to `/opt/homebrew/bin`, `/usr/local/bin`,
-  and `/opt/socktainer/bin`.
-- `socktainer.homeDirectory`
-- `socktainer.setDockerHost`
 
-The `installer.*` and `socktainer.installer.*` options were removed. HexBox no
-longer installs either runtime, and setting them is an evaluation error.
+The `installer.*` and `socktainer.*` options were removed. HexBox no longer
+installs Apple `container` or manages Socktainer, and setting them is an
+evaluation error.
 
 Machine notes:
 

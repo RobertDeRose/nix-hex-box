@@ -18,12 +18,6 @@ hb_init() {
   container_timeout=${HB_CONTAINER_TIMEOUT:?}
   container_name=${HB_CONTAINER_NAME:?}
   reconcile_host_container_internal=${HB_RECONCILE_HOST_CONTAINER_INTERNAL:?}
-  socktainer_enabled=${HB_SOCKTAINER_ENABLED:?}
-  socktainer_agent_label=${HB_SOCKTAINER_AGENT_LABEL:?}
-  socktainer_socket=${HB_SOCKTAINER_SOCKET:?}
-  socktainer_health=${HB_SOCKTAINER_HEALTH:?}
-  socktainer_err_log=${HB_SOCKTAINER_ERR_LOG:?}
-  socktainer_out_log=${HB_SOCKTAINER_OUT_LOG:?}
   readiness_log=${HB_READINESS_LOG:?}
   remote_store=${HB_REMOTE_STORE:?}
   start_script=${HB_START_SCRIPT:?}
@@ -37,7 +31,6 @@ hb_init() {
 if [ "$#" -eq 1 ]; then
   case "$1" in
     builder) set -- builder status ;;
-    socktainer) set -- socktainer status ;;
   esac
 fi
 
@@ -437,11 +430,6 @@ builder::gc() {
 # @cmd Show raw launchd and container inspection data
 builder::inspect() {
   hb_init
-  if launchctl print "gui/$(id -u)/$socktainer_agent_label" > /dev/null 2>&1; then
-    print_heading '🔎' 'launchd socktainer'
-    launchctl print "gui/$(id -u)/$socktainer_agent_label" || true
-    printf '\n'
-  fi
   print_heading '🔎' 'container machine inspect'
   status_container || true
 }
@@ -451,88 +439,6 @@ builder::inspect() {
 builder::ssh() {
   hb_init
   exec /usr/bin/ssh -F "$ssh_config" "$host_alias" "$@"
-}
-
-socktainer_disabled() {
-  print_error 'Socktainer is disabled'
-  exit 1
-}
-
-# @cmd Manage Socktainer
-socktainer() {
-  hb_init
-  socktainer::status
-}
-
-# @cmd Show Socktainer status
-socktainer::status() {
-  hb_init
-  local agent_kind=fail
-  local agent_text='not loaded'
-  local socket_kind=fail
-  local socket_text=missing
-  local ping_kind=fail
-  local ping_text=unreachable
-
-  if [ "$socktainer_enabled" != true ]; then
-    socktainer_disabled
-  fi
-
-  if launchctl print "gui/$(id -u)/$socktainer_agent_label" > /dev/null 2>&1; then
-    agent_kind=ok
-    agent_text=loaded
-  fi
-
-  if [ -S "$socktainer_socket" ]; then
-    socket_kind=ok
-    socket_text=present
-  fi
-
-  if "$socktainer_health" > /dev/null 2>&1; then
-    ping_kind=ok
-    ping_text=ready
-  fi
-
-  print_heading '🚢' 'Socktainer status'
-  print_state_row 'socktainer agent' "$agent_kind" "$agent_text"
-  print_state_row 'socktainer socket' "$socket_kind" "$socket_text"
-  print_state_row 'socktainer ping' "$ping_kind" "$ping_text"
-  print_state_row 'docker host' info "unix://$socktainer_socket"
-}
-
-socktainer_logs_impl() {
-  local follow="$1"
-
-  if [ "$socktainer_enabled" != true ]; then
-    socktainer_disabled
-  fi
-
-  if [ ! -f "$socktainer_err_log" ]; then
-    print_error "Log file not found: $socktainer_err_log"
-    exit 1
-  fi
-
-  if [ ! -f "$socktainer_out_log" ]; then
-    print_error "Log file not found: $socktainer_out_log"
-    exit 1
-  fi
-
-  if [ "$follow" -eq 1 ]; then
-    exec /usr/bin/tail -n 100 -f "$socktainer_err_log" "$socktainer_out_log"
-  else
-    print_heading '📜' 'socktainer stderr'
-    /usr/bin/tail -n 100 "$socktainer_err_log"
-    printf '\n'
-    print_heading '📜' 'socktainer stdout'
-    /usr/bin/tail -n 100 "$socktainer_out_log"
-  fi
-}
-
-# @cmd Show Socktainer logs
-# @flag -f --follow Follow log output
-socktainer::logs() {
-  hb_init
-  socktainer_logs_impl "${argc_follow:-0}"
 }
 
 # @cmd Run runtime and connectivity diagnostics

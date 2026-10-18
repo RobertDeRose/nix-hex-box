@@ -2,17 +2,13 @@
 # Generated from scripts/hb.sh by scripts/generate-hb-assets.sh.
 
 local -a top_commands builder_commands builder_help_commands builder_log_targets builder_log_options
-local -a socktainer_commands socktainer_help_commands socktainer_log_options
 local -a doctor_commands doctor_help_commands
 
-top_commands=('builder' 'socktainer' 'doctor' 'help' '--help' '-h' '--version' '-V')
+top_commands=('builder' 'doctor' 'help' '--help' '-h' '--version' '-V')
 builder_commands=('status' 'logs' 'test' 'repair' 'reset' 'gc' 'inspect' 'ssh' 'help')
 builder_help_commands=('status' 'logs' 'test' 'repair' 'reset' 'gc' 'inspect' 'ssh')
 builder_log_targets=('idle' 'readiness' 'boot')
 builder_log_options=('-f' '--follow' '-n' '--lines' '-h' '--help')
-socktainer_commands=('status' 'logs' 'help')
-socktainer_help_commands=('status' 'logs')
-socktainer_log_options=('-f' '--follow' '-h' '--help')
 doctor_commands=('runtime' 'dns' 'host' 'help')
 doctor_help_commands=('runtime' 'dns' 'host')
 
@@ -41,21 +37,6 @@ case "$words[2]" in
         ;;
       ssh)
         return
-        ;;
-    esac
-    ;;
-  socktainer)
-    if ((CURRENT == 3)); then
-      _describe 'socktainer command' socktainer_commands
-      return
-    fi
-
-    case "$words[3]" in
-      logs)
-        _describe 'option' socktainer_log_options
-        ;;
-      help)
-        _describe 'socktainer command' socktainer_help_commands
         ;;
     esac
     ;;

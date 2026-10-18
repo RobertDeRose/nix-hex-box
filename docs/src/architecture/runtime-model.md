@@ -22,13 +22,8 @@ The current runtime model is:
 - the remote `nix-daemon` runs through a narrow passwordless sudo wrapper inside the guest
 - boot-time preparation provisions the `nixbld` build users and makes `/dev/net/tun` available to sandboxed builds
 - idle shutdown runs inside the guest and powers off the machine after the configured inactivity timeout
-- Socktainer, when enabled, runs as a separate user launch agent and exposes a Docker-compatible Unix socket under `$HOME/.socktainer`
 
 The builder machine owns a persistent guest `/nix` store. Build outputs and
 substitutes survive machine stop/start cycles. They are deleted when the machine
 is removed, including explicit `hb builder reset` and automatic recreation after
 an image-contract generation change.
-
-Socktainer is not part of the builder control path. It is an optional companion
-daemon for Docker-compatible local tooling on top of the same Apple container
-runtime.

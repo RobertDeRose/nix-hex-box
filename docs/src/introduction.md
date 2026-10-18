@@ -14,7 +14,6 @@ Current design highlights:
 
 - uses the Apple `container` CLI you install yourself, resolved through `PATH`
 - pulls the published Alpine/Lix-based builder image by default, with an optional local custom image build
-- can optionally manage Socktainer to expose a Docker-compatible local API socket
 - configures `nix.buildMachines` for `ssh-ng://container-builder`
 - manages durable state under `~/.local/state/hb`
 - wakes the builder machine on demand through SSH `ProxyCommand`

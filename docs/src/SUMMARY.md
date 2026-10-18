@@ -7,7 +7,6 @@
 - [Overview](./getting-started/overview.md)
 - [Installation](./getting-started/installation.md)
 - [Configuration](./getting-started/configuration.md)
-- [Socktainer](./getting-started/socktainer.md)
 
 ## Architecture
 

@@ -10,7 +10,6 @@
 - guest-side `builder` user with narrow passwordless sudo for the remote `nix-daemon`
 - guest-side idle shutdown using a lightweight watchdog
 - host-side `container machine run` executed as the runtime-owning macOS user, even when SSH is launched by root `nix-daemon`
-- optional Socktainer sidecar for Docker-compatible local tooling
 
 Known constraints:
 

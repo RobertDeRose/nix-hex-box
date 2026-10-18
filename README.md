@@ -23,7 +23,6 @@ Current design highlights:
 - keeps the guest `/nix` store persistent across machine stops and starts
 - powers the guest off after a configurable idle timeout with no active SSH connections
 - manages durable host state under `~/.local/state/hb`
-- can manage Socktainer as an optional Docker-compatible API layer
 - installs host-side SSH aliases for both `nix-builder` and `container-builder`
 - writes a generated `known_hosts` file under `~/.local/state/hb` so SSH verifies the builder host key
 - exposes `host.container.internal` for Apple containers by default via `container system dns`
@@ -38,9 +37,9 @@ The flake exports:
 
 ## Requirements
 
-HexBox does not install Apple `container` or Socktainer. Install them any way
-you like and keep them on `PATH`. Activation prints an error when `container`
-is missing, or when Socktainer is enabled but missing.
+HexBox does not install Apple `container`. Install it any way you like
+(Homebrew, mise, or Apple's pkg) and keep it on `PATH`. Activation prints an
+error when `container` is missing.
 
 ## Example
 
@@ -59,7 +58,6 @@ is missing, or when Socktainer is enabled but missing.
             cpus = 4;
             memory = "8G";
             maxJobs = 4;
-            socktainer.enable = true;
             # Optional override if you do not want to use config.system.primaryUser.
             user = "myuser";
           };
@@ -139,9 +137,6 @@ Available machine options:
 Available host/container integration options:
 
 - `services.container-builder.exposeHostContainerInternal`
-- `services.container-builder.socktainer.enable`
-- `services.container-builder.socktainer.homeDirectory`
-- `services.container-builder.socktainer.binary`
 
 The builder machine writes a minimal `nix.conf` with
 `https://cache.nixos.org/` configured as a substituter. Bootstrap provisions the
@@ -155,30 +150,6 @@ services.container-builder = {
   enable = true;
 };
 ```
-
-## Socktainer
-
-Install Socktainer yourself, then set
-`services.container-builder.socktainer.enable = true;` to manage a user launch
-agent for the current primary user. The agent resolves `socktainer` through
-PATH and falls back to `/opt/homebrew/bin`, `/usr/local/bin`, and
-`/opt/socktainer/bin`.
-
-This exposes a Docker-compatible Unix socket at:
-
-```text
-$HOME/.socktainer/container.sock
-```
-
-Example:
-
-```bash
-export DOCKER_HOST=unix://$HOME/.socktainer/container.sock
-docker ps
-```
-
-Set `services.container-builder.socktainer.setDockerHost = true;` if you want
-the module to export that socket as `DOCKER_HOST` in the user environment.
 
 ## Helper
 

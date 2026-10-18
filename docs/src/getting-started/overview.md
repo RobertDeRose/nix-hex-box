@@ -12,7 +12,6 @@ When enabled, the module:
 - uses the Apple `container` CLI found on `PATH`; it does not install it
 - pulls the published Alpine/Lix-based builder image by default, with an optional local custom image build
 - creates a persistent Apple `container machine` for Linux builds
-- can optionally manage Socktainer to expose a Docker-compatible local socket
 - writes helper scripts and SSH configuration under `~/.local/state/hb`
 - configures host-side SSH aliases for `nix-builder` and `container-builder`, backed by a generated `known_hosts` file for builder host-key verification
 - configures `nix.buildMachines` so the host daemon can use the builder for Linux derivations
@@ -20,6 +19,3 @@ When enabled, the module:
 
 The helper entrypoint is `hb`, which provides status, repair, logs, and
 inspection commands for the builder runtime.
-
-If you enable Socktainer, the same helper also exposes Socktainer-specific
-status and log commands. See [Socktainer](./socktainer.md).

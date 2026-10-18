@@ -21,31 +21,17 @@ let
 
   workDir = cfg.workingDirectory;
   # Keep the caller's selection first; background services may have a minimal PATH.
-  mkPathCommand =
-    name: command: fallbackPath: hint:
-    pkgs.writeShellScript "hexbox-${name}" ''
-      set -euo pipefail
-      export PATH="''${PATH:+$PATH:}${fallbackPath}"
-      if ! command -v ${escapeShellArg command} >/dev/null 2>&1; then
-        echo ${escapeShellArg "hexbox: `${command}` not found on PATH. ${hint}"} >&2
-        exit 127
-      fi
-      exec ${escapeShellArg command} "$@"
-    '';
-  containerCommand =
-    mkPathCommand "container" cfg.containerBinary "/opt/homebrew/bin:/usr/local/bin"
-      "Install Apple container (Homebrew, mise, or https://github.com/apple/container/releases) or set services.container-builder.containerBinary.";
-  socktainerCommand =
-    mkPathCommand "socktainer-bin" cfg.socktainer.binary
-      "/opt/homebrew/bin:/usr/local/bin:/opt/socktainer/bin"
-      "Install Socktainer (https://github.com/socktainer/socktainer/releases) or set services.container-builder.socktainer.binary.";
+  containerCommand = pkgs.writeShellScript "hexbox-container" ''
+    set -euo pipefail
+    export PATH="''${PATH:+$PATH:}/opt/homebrew/bin:/usr/local/bin"
+    if ! command -v ${escapeShellArg cfg.containerBinary} >/dev/null 2>&1; then
+      echo ${escapeShellArg "hexbox: `${cfg.containerBinary}` not found on PATH. Install Apple container (Homebrew, mise, or https://github.com/apple/container/releases) or set services.container-builder.containerBinary."} >&2
+      exit 127
+    fi
+    exec ${escapeShellArg cfg.containerBinary} "$@"
+  '';
   hostContainerInternalDomain = "host.container.internal";
   hostContainerInternalLoopback = "203.0.113.113";
-  socktainerAgentName = "hexbox-socktainer";
-  socktainerAgentLabel = "org.nixos.${socktainerAgentName}";
-  socktainerStateDirectory = "${cfg.socktainer.homeDirectory}/.socktainer";
-  socktainerSocketPath = "${socktainerStateDirectory}/container.sock";
-  socktainerApiUrl = "http://localhost/_ping";
   sshKeyPath = "${workDir}/builder_ed25519";
   hostKeyPath = "${workDir}/ssh_host_ed25519_key";
   knownHostsPath = "${workDir}/known_hosts";
@@ -707,27 +693,6 @@ let
     exit 1
   '';
 
-  socktainerHealthScript = pkgs.writeShellScript "hexbox-socktainer-health" ''
-    set -euo pipefail
-
-    socket_path=${escapeShellArg socktainerSocketPath}
-
-    if [ ! -S "$socket_path" ]; then
-      echo "socktainer socket not found: $socket_path" >&2
-      exit 1
-    fi
-
-    exec /usr/bin/curl --silent --show-error --fail --unix-socket "$socket_path" ${escapeShellArg socktainerApiUrl}
-  '';
-
-  socktainerLaunchScript = pkgs.writeShellScript "hexbox-socktainer" ''
-    set -euo pipefail
-
-    export HOME=${escapeShellArg cfg.socktainer.homeDirectory}
-    ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg socktainerStateDirectory}
-    exec ${socktainerCommand} --no-check-compatibility
-  '';
-
   userSshConfig = pkgs.writeText "container-builder-ssh-config" ''
     Host nix-builder
       HostName ${machineName}
@@ -770,12 +735,6 @@ let
     export HB_CONTAINER_TIMEOUT=${escapeShellArg "${pkgs.coreutils}/bin/timeout"}
     export HB_CONTAINER_NAME=${escapeShellArg machineName}
     export HB_RECONCILE_HOST_CONTAINER_INTERNAL=${escapeShellArg "${workDir}/reconcile-host-container-internal.sh"}
-    export HB_SOCKTAINER_ENABLED=${boolToString cfg.socktainer.enable}
-    export HB_SOCKTAINER_AGENT_LABEL=${escapeShellArg socktainerAgentLabel}
-    export HB_SOCKTAINER_SOCKET=${escapeShellArg socktainerSocketPath}
-    export HB_SOCKTAINER_HEALTH=${escapeShellArg socktainerHealthScript}
-    export HB_SOCKTAINER_ERR_LOG=${escapeShellArg "${socktainerStateDirectory}/socktainer.err.log"}
-    export HB_SOCKTAINER_OUT_LOG=${escapeShellArg "${socktainerStateDirectory}/socktainer.out.log"}
     export HB_READINESS_LOG=${escapeShellArg readinessLogPath}
 
     export HB_REMOTE_STORE=${escapeShellArg remoteStore}
@@ -810,10 +769,7 @@ in
     (removedOption [
       "installer"
     ] "HexBox no longer installs Apple container; install it yourself and keep it on PATH.")
-    (removedOption [
-      "socktainer"
-      "installer"
-    ] "HexBox no longer installs Socktainer; install it yourself and keep it on PATH.")
+    (removedOption [ "socktainer" ] "HexBox no longer manages Socktainer; run it separately.")
   ];
 
   options.services.container-builder = {
@@ -985,30 +941,6 @@ in
       description = "Install opt-in bash, zsh, and fish completion files for `hb` into the standard Nix-managed shell completion directories.";
     };
 
-    socktainer.enable = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Manage a Socktainer launch agent as an optional Docker API compatibility layer on top of Apple container. Socktainer must already be installed.";
-    };
-
-    socktainer.binary = mkOption {
-      type = types.str;
-      default = "socktainer";
-      description = "Socktainer command resolved through PATH, or an explicit binary path.";
-    };
-
-    socktainer.homeDirectory = mkOption {
-      type = types.str;
-      default = "/Users/${owner}";
-      description = "macOS home directory used when launching Socktainer; Socktainer stores its socket and logs under `$HOME/.socktainer`.";
-    };
-
-    socktainer.setDockerHost = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Export `DOCKER_HOST` in the user session environment so Docker-compatible clients use Socktainer by default.";
-    };
-
   };
 
   config = mkIf cfg.enable {
@@ -1029,10 +961,6 @@ in
 
     environment.systemPackages = optional cfg.cli.completions.enable completionPackage;
 
-    environment.variables = mkIf (cfg.socktainer.enable && cfg.socktainer.setDockerHost) {
-      DOCKER_HOST = "unix://${socktainerSocketPath}";
-    };
-
     environment.etc."ssh/ssh_config.d/201-container-builder.conf".source = rootSshConfig;
 
     system.activationScripts.extraActivation.text = mkAfter ''
@@ -1043,12 +971,10 @@ in
       stale_machine_proxy_agent=${escapeShellArg "/Users/${owner}/Library/LaunchAgents/org.nixos.hexbox-machine-proxy.plist"}
       /bin/launchctl bootout "gui/$(/usr/bin/id -u ${escapeShellArg owner})" "$stale_machine_proxy_agent" >/dev/null 2>&1 || true
       /bin/rm -f "$stale_machine_proxy_agent"
-
-      ${optionalString cfg.socktainer.enable ''
-        if ! ${socktainerCommand} --version >/dev/null; then
-          echo "error: Socktainer is not installed; the Socktainer launch agent will fail until it is" >&2
-        fi
-      ''}
+      stale_socktainer_agent=${escapeShellArg "/Users/${owner}/Library/LaunchAgents/org.nixos.hexbox-socktainer.plist"}
+      /bin/launchctl bootout "gui/$(/usr/bin/id -u ${escapeShellArg owner})" "$stale_socktainer_agent" >/dev/null 2>&1 || true
+      /bin/rm -f "$stale_socktainer_agent"
+      /bin/rm -f ${escapeShellArg "${workDir}/socktainer.sh"}
 
       if ! ${containerCommand} --version >/dev/null; then
         echo "error: Apple container is not installed; skipping ${hostContainerInternalDomain} DNS reconciliation" >&2
@@ -1073,7 +999,6 @@ in
       ${pkgs.coreutils}/bin/install -m 0755 ${stopScript} ${escapeShellArg "${workDir}/stop-container.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${resetScript} ${escapeShellArg "${workDir}/reset-container.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${reconcileHostContainerInternalScript} ${escapeShellArg "${workDir}/reconcile-host-container-internal.sh"}
-      ${pkgs.coreutils}/bin/install -m 0755 ${socktainerLaunchScript} ${escapeShellArg "${workDir}/socktainer.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${sshWrapperScript} ${escapeShellArg "${workDir}/ssh-wrapper.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${helperScript} /usr/local/bin/hb
       ${pkgs.coreutils}/bin/install -m 0644 ${userSshConfig} ${escapeShellArg "${workDir}/ssh_config"}
@@ -1088,27 +1013,10 @@ in
       fi
       /usr/sbin/chown -R ${escapeShellArg owner}:staff ${escapeShellArg workDir}
 
-      ${optionalString cfg.socktainer.enable ''
-        ${pkgs.coreutils}/bin/mkdir -p ${escapeShellArg socktainerStateDirectory}
-        /usr/sbin/chown ${escapeShellArg owner}:staff ${escapeShellArg socktainerStateDirectory}
-      ''}
-
       if [ ! -e ${escapeShellArg sshKeyPath} ] || [ ! -e ${escapeShellArg "${sshKeyPath}.pub"} ] || [ ! -e ${escapeShellArg hostKeyPath} ] || [ ! -e ${escapeShellArg "${hostKeyPath}.pub"} ]; then
         echo "warning: container-builder keys are missing in ${workDir}; run ${workDir}/bootstrap-keys.sh" >&2
       fi
     '';
-
-    launchd.user.agents."${socktainerAgentName}" = mkIf cfg.socktainer.enable {
-      serviceConfig = {
-        KeepAlive = true;
-        RunAtLoad = true;
-        ProgramArguments = [ "${workDir}/socktainer.sh" ];
-        StandardErrorPath = "${socktainerStateDirectory}/socktainer.err.log";
-        StandardOutPath = "${socktainerStateDirectory}/socktainer.out.log";
-        WorkingDirectory = socktainerStateDirectory;
-      };
-      managedBy = "services.container-builder.socktainer.enable";
-    };
 
     nix.distributedBuilds = true;
     nix.settings.builders-use-substitutes = true;
