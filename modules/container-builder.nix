@@ -8,6 +8,7 @@ with lib;
 let
   cfg = config.services.container-builder;
   runtimeVersions = import ./runtime-versions.nix;
+  # Fail evaluation when a removed services.container-builder option is set.
   removedOption =
     path:
     mkRemovedOptionModule (
@@ -20,7 +21,9 @@ let
   owner = cfg.user;
 
   workDir = cfg.workingDirectory;
-  # Keep the caller's selection first; background services may have a minimal PATH.
+  # Run the user-installed container CLI. Search the caller's PATH first, then the
+  # Homebrew, /usr/local, and runtime-user mise shim directories, because
+  # background services may have a minimal PATH. Exit 127 if it is not found.
   containerCommand = pkgs.writeShellScript "hexbox-container" ''
     set -euo pipefail
     fallback_path="''${PATH:+$PATH:}/opt/homebrew/bin:/usr/local/bin"
