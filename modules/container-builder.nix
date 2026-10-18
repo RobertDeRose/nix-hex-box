@@ -1020,7 +1020,7 @@ in
       ${pkgs.coreutils}/bin/install -m 0755 ${resetScript} ${escapeShellArg "${workDir}/reset-container.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${reconcileHostContainerInternalScript} ${escapeShellArg "${workDir}/reconcile-host-container-internal.sh"}
       ${pkgs.coreutils}/bin/install -m 0755 ${sshWrapperScript} ${escapeShellArg "${workDir}/ssh-wrapper.sh"}
-      ${pkgs.coreutils}/bin/install -m 0755 ${helperScript} /usr/local/bin/hb
+      ${pkgs.coreutils}/bin/install -D -m 0755 ${helperScript} /usr/local/bin/hb
       ${pkgs.coreutils}/bin/install -m 0644 ${userSshConfig} ${escapeShellArg "${workDir}/ssh_config"}
       ${pkgs.coreutils}/bin/install -m 0644 ${rootSshConfig} ${escapeShellArg "${workDir}/ssh_config_root"}
       : > ${escapeShellArg knownHostsPath}
