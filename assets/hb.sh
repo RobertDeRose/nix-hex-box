@@ -7,6 +7,7 @@ set -eo pipefail
 
 hb_env_loaded=0
 
+# Load the HB_* settings exported by the module wrapper once; abort if any is unset.
 hb_init() {
   if [ "$hb_env_loaded" -eq 1 ]; then
     return
@@ -427,7 +428,7 @@ builder::gc() {
   exec /usr/bin/ssh -F "$ssh_config" "$host_alias" 'nix-collect-garbage -d'
 }
 
-# @cmd Show raw launchd and container inspection data
+# @cmd Show raw container machine inspection data
 builder::inspect() {
   hb_init
   print_heading '🔎' 'container machine inspect'
@@ -684,7 +685,7 @@ COMMANDS:
   repair   Verify builder health and recover runtime if needed
   reset    Destroy and recreate the builder machine
   gc       Run nix garbage collection inside the builder
-  inspect  Show raw launchd and container inspection data
+  inspect  Show raw container machine inspection data
   ssh      Open an SSH session to the builder
 EOF
   exit
@@ -1081,7 +1082,7 @@ _argc_parse_builder_gc() {
 
 _argc_usage_builder_inspect() {
   cat <<- 'EOF'
-Show raw launchd and container inspection data
+Show raw container machine inspection data
 
 USAGE: hb builder inspect
 EOF

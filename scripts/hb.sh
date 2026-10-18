@@ -7,6 +7,7 @@ set -eo pipefail
 
 hb_env_loaded=0
 
+# Load the HB_* settings exported by the module wrapper once; abort if any is unset.
 hb_init() {
   if [ "$hb_env_loaded" -eq 1 ]; then
     return
@@ -427,7 +428,7 @@ builder::gc() {
   exec /usr/bin/ssh -F "$ssh_config" "$host_alias" 'nix-collect-garbage -d'
 }
 
-# @cmd Show raw launchd and container inspection data
+# @cmd Show raw container machine inspection data
 builder::inspect() {
   hb_init
   print_heading '🔎' 'container machine inspect'

@@ -1,5 +1,6 @@
 # Generated from scripts/hb.sh by scripts/generate-hb-assets.sh.
 # shellcheck shell=bash disable=SC2207
+# Complete hb commands, subcommands, and options for bash.
 _hb() {
   local cur prev cmd subcmd
 
