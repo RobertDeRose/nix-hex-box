@@ -162,13 +162,16 @@ html:not(.js) .theme-toggle { display: none; }
    then again once a minute. */
 .case::before {
   content: "";
-  position: absolute; inset: 4% 6% 10%;
+  /* Covers the image exactly (the figure's 4% side padding), and the mask
+     limits the light to the case itself, not the background around it. */
+  position: absolute; inset: 0 4%;
   z-index: 2;
   pointer-events: none;
-  background: linear-gradient(105deg, transparent 38%, rgb(255 255 255 / 0.55) 48%, transparent 58%);
+  background: linear-gradient(105deg, transparent 40%, rgb(255 255 255 / 0.75) 47%, rgb(255 255 255 / 0.9) 49%, transparent 56%);
   background-size: 250% 100%;
   background-position: 120% 0;
-  mix-blend-mode: soft-light;
+  -webkit-mask: url(assets/icon.png) center / contain no-repeat;
+  mask: url(assets/icon.png) center / contain no-repeat;
   opacity: 0;
 }
 /* Each 60s cycle spends its first 1.6s (2.7%) sweeping, then rests out of view. */
