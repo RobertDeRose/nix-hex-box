@@ -56,7 +56,7 @@ These end up in `nix.buildMachines`.
 | `sshUser` | `"builder"` | The user Nix logs in as inside the builder. |
 | `containerPort` | `22` | The SSH port inside the builder. |
 | `exposeHostContainerInternal` | `true` | Lets Apple containers reach your Mac at `host.container.internal`. |
-| `readiness.timeoutSeconds` | `60` | How long `hb builder repair` and `hb builder reset` wait for an SSH login to succeed. |
+| `readiness.timeoutSeconds` | `60` | How long each SSH readiness check waits for a login to succeed. `hb builder reset` runs one check; `hb builder repair` retries up to three times. |
 | `readiness.intervalSeconds` | `1` | How often they try. |
 
 ## Files

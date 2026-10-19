@@ -7,7 +7,7 @@ env_shell_expand = true
 argc = "latest"
 actionlint = "latest"
 hadolint = "latest"
-hk = { version = "1.41", arch = "aarch64" }
+hk = { version = "2.7.0", arch = "aarch64" }
 node = "lts"
 pkl = "latest"
 shellcheck = "latest"

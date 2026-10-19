@@ -43,11 +43,10 @@ Add HexBox to your flake:
 }
 ```
 
-Then switch, create the builder's SSH keys once, and try a build:
+Then switch, and try a build:
 
 ```bash
 sudo darwin-rebuild switch --flake .#my-host
-~/.local/state/hb/bootstrap-keys.sh
 hb builder repair
 hb builder test
 ```

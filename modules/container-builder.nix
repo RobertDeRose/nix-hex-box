@@ -936,13 +936,13 @@ in
     readiness.timeoutSeconds = mkOption {
       type = types.ints.positive;
       default = 60;
-      description = "How long startup waits for the builder SSH service to become reachable.";
+      description = "How long each SSH readiness check waits for a login to the builder to succeed. `hb builder reset` runs one check; `hb builder repair` retries up to three times, so it can wait up to three times this long.";
     };
 
     readiness.intervalSeconds = mkOption {
       type = types.ints.positive;
       default = 1;
-      description = "Polling interval for builder SSH readiness checks.";
+      description = "How often `hb builder repair` and `hb builder reset` retry the SSH login while waiting.";
     };
 
     idleShutdown.enable = mkOption {
@@ -1026,6 +1026,8 @@ in
       ${pkgs.coreutils}/bin/install -D -m 0755 ${helperScript} /usr/local/bin/hb
       ${pkgs.coreutils}/bin/install -m 0644 ${userSshConfig} ${escapeShellArg "${workDir}/ssh_config"}
       ${pkgs.coreutils}/bin/install -m 0644 ${rootSshConfig} ${escapeShellArg "${workDir}/ssh_config_root"}
+      # Create the builder's SSH keys on the first switch. Existing keys are kept.
+      /usr/bin/sudo -n -u ${escapeShellArg owner} -H ${bootstrapKeysScript} >/dev/null || true
       : > ${escapeShellArg knownHostsPath}
       /bin/chmod 0644 ${escapeShellArg knownHostsPath}
       : > ${escapeShellArg readinessLogPath}
@@ -1037,7 +1039,7 @@ in
       /usr/sbin/chown -R ${escapeShellArg owner}:staff ${escapeShellArg workDir}
 
       if [ ! -e ${escapeShellArg sshKeyPath} ] || [ ! -e ${escapeShellArg "${sshKeyPath}.pub"} ] || [ ! -e ${escapeShellArg hostKeyPath} ] || [ ! -e ${escapeShellArg "${hostKeyPath}.pub"} ]; then
-        echo "warning: container-builder keys are missing in ${workDir}; run ${workDir}/bootstrap-keys.sh" >&2
+        echo "warning: could not create the builder's SSH keys in ${workDir}; run ${workDir}/bootstrap-keys.sh to see why" >&2
       fi
     '';
 

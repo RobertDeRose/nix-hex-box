@@ -79,23 +79,14 @@ The machine gets 4 CPUs and only 1 GB of memory unless you say otherwise.
 sudo darwin-rebuild switch --flake .#my-host
 ```
 
+The first switch also creates the builder's SSH keys: the key Nix logs in
+with, the builder's own host key, and a `known_hosts` file so your Mac can
+check it's talking to the right machine.
+
 If `container` can't be found, the switch still finishes, but prints
 `error: Apple container is not installed`. Fix that before going on.
 
-## 4. Create the builder's SSH keys
-
-This step is only needed once:
-
-```bash
-~/.local/state/hb/bootstrap-keys.sh
-```
-
-It creates the key Nix uses to log in to the builder, the builder's own host
-key, and a `known_hosts` file so your Mac can check it's talking to the right
-machine. Until these exist, the builder can't start, and each switch reminds
-you with a warning.
-
-## 5. Start the builder and try a build
+## 4. Start the builder and try a build
 
 ```bash
 hb builder repair
