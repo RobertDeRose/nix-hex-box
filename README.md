@@ -7,8 +7,10 @@
 HexBox gives Nix on your Mac a way to build Linux packages. It's a
 `nix-darwin` module that runs a small `aarch64-linux` machine using Apple's
 `container` tool, and tells Nix to send Linux builds there. The machine boots
-when a build needs it, shuts itself down when idle, and keeps its `/nix` store
-in between.
+when a build needs it, shuts itself down after five minutes without builds,
+and keeps its `/nix` store in between.
+
+It doesn't build `x86_64-linux`, and it doesn't work on Intel Macs.
 
 - Website: <https://robertderose.github.io/nix-hex-box/>
 - Documentation: <https://robertderose.github.io/nix-hex-box/docs/>
@@ -18,7 +20,8 @@ in between.
 You need an Apple silicon Mac, a flake-based `nix-darwin` configuration, and
 Apple's `container`, installed however you like (`brew install container`,
 `mise use -g container`, or Apple's package) and started with
-`container system start`.
+`container system start`. If you use mise, install `container` globally: a
+version set for one project directory is invisible to the Nix daemon.
 
 Add HexBox to your flake:
 
@@ -42,6 +45,9 @@ Add HexBox to your flake:
   };
 }
 ```
+
+The machine gets 4 CPUs and only 1 GB of memory unless you say otherwise, so
+8 GB is a sensible starting point.
 
 Then switch, and try a build:
 
