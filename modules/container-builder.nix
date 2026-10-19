@@ -936,7 +936,7 @@ in
     readiness.timeoutSeconds = mkOption {
       type = types.ints.positive;
       default = 60;
-      description = "How long `hb builder repair` and `hb builder reset` wait for an SSH login to the builder to succeed.";
+      description = "How long each SSH readiness check waits for a login to the builder to succeed. `hb builder reset` runs one check; `hb builder repair` retries up to three times, so it can wait up to three times this long.";
     };
 
     readiness.intervalSeconds = mkOption {
