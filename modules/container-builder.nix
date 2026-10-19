@@ -1027,7 +1027,7 @@ in
       ${pkgs.coreutils}/bin/install -m 0644 ${userSshConfig} ${escapeShellArg "${workDir}/ssh_config"}
       ${pkgs.coreutils}/bin/install -m 0644 ${rootSshConfig} ${escapeShellArg "${workDir}/ssh_config_root"}
       # Create the builder's SSH keys on the first switch. Existing keys are kept.
-      ${escapeShellArg "${workDir}/bootstrap-keys.sh"} >/dev/null || true
+      /usr/bin/sudo -n -u ${escapeShellArg owner} -H ${bootstrapKeysScript} >/dev/null || true
       : > ${escapeShellArg knownHostsPath}
       /bin/chmod 0644 ${escapeShellArg knownHostsPath}
       : > ${escapeShellArg readinessLogPath}
