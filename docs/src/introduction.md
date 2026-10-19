@@ -1,24 +1,48 @@
+---
+slug: /
+---
+
 # Introduction
 
-<p align="center">
-  <img src="hexbox-logo.png" alt="HexBox logo" width="240" />
-</p>
+![The HexBox mascot, a platypus in devil horns, inside a glass box](/img/icon.png)
 
-`nix-hex-box` is a `nix-darwin` module that configures an Apple
-`container machine` backed `aarch64-linux` remote builder for Nix.
+HexBox gives Nix on your Mac a way to build Linux packages. It's a
+`nix-darwin` module that runs a small `aarch64-linux` machine using Apple's
+`container` tool, and tells Nix to send Linux builds there.
 
-The module is designed for Darwin hosts that want to offload Linux derivations
-to a local virtualized builder while keeping the host configuration declarative.
+You don't manage the machine yourself. The first time Nix needs it, it boots.
+When no builds have run for five minutes, it shuts itself down. Anything it
+built or downloaded stays in its `/nix` store for next time.
 
-Current design highlights:
+## Who it's for
 
-- uses the Apple `container` CLI you install yourself, resolved through `PATH`
-- pulls the published Alpine/Lix-based builder image by default, with an optional local custom image build
-- configures `nix.buildMachines` for `ssh-ng://container-builder`
-- manages durable state under `~/.local/state/hb`
-- wakes the builder machine on demand through SSH `ProxyCommand`
-- keeps guest `/nix` persistent across machine stop/start cycles
-- supports guest-side idle shutdown and recovery-oriented health checks
+HexBox is a good fit if you:
 
-This book documents the module itself. If you use `nix-hex-box` from another
-repo, that repo should only need a high-level integration guide.
+- manage an Apple silicon Mac with `nix-darwin`,
+- need to build `aarch64-linux` packages, for example NixOS systems or
+  container images, and
+- would rather not run a separate Linux server or a hand-managed VM.
+
+It doesn't build `x86_64-linux`, and it doesn't work on Intel Macs.
+
+## How it works, briefly
+
+Nix already knows how to use a remote builder over SSH. HexBox sets one up and
+makes the far end of that connection a machine that can wake on demand:
+
+1. A build needs `aarch64-linux`, so Nix connects to the `container-builder`
+   SSH host.
+2. That SSH host is a small script, not a real network address. It starts the
+   builder machine if it's off, then relays the connection into it.
+3. The build runs in the machine, and the results are copied back to your Mac.
+
+[How Nix reaches the builder](./architecture/networking.md) covers this in
+more detail.
+
+## Next steps
+
+- [Install HexBox](./getting-started/installation.md) and run your first build.
+- [Configure it](./getting-started/configuration.md): give the machine more
+  memory, change when it shuts down, or use your own image.
+- If something isn't working, start with
+  [Checking and repairing the builder](./operations/verification.md).

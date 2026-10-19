@@ -1,36 +1,48 @@
-# Network And Access Paths
+# How Nix reaches the builder
 
-The module uses one SSH transport for both user access and Nix daemon access.
+Nix talks to the builder the way it talks to any remote builder: over SSH,
+using `ssh-ng://builder@container-builder`. The trick is that
+`container-builder` isn't a network address.
 
-## ProxyCommand path
+## The SSH host is a script
 
-The generated SSH config points `nix-builder` and `container-builder` at
-`~/.local/state/hb/proxy.sh` as a `ProxyCommand`.
+HexBox installs an SSH configuration, in
+`/etc/ssh/ssh_config.d/201-container-builder.conf`, that defines two host
+names, `container-builder` and `nix-builder`. Both point at a `ProxyCommand`:
+a script at `~/.local/state/hb/proxy.sh`. When SSH connects, it runs that
+script and talks to whatever the script connects it to.
 
-That proxy:
+The script:
 
-- sudoes back to the configured runtime-owning macOS user when invoked by root
-- starts the Apple container system if needed
-- creates or updates the builder machine when needed
-- runs `container machine run --root -i -n <machine> socat STDIO TCP:127.0.0.1:<ssh-port>`
-- relays SSH directly into guest `sshd` and closes the relay when SSH exits
+1. Starts the builder machine if it isn't running, and recovers Apple's
+   `container` services first if they aren't healthy.
+2. Waits up to 30 seconds for the machine's SSH server to accept connections.
+3. Runs `container machine run … socat`, which connects SSH straight to the
+   SSH server inside the machine.
 
-Because the SSH connection enters through `container machine run`, the host does
-not need to know the machine's current IP address. A stopped machine is booted on
-demand before SSH reaches the guest.
+Because the connection goes through `container`, your Mac never needs to know
+the machine's IP address, which changes every time it boots, and no port is
+opened on your Mac.
 
-## Root daemon path
+The host key is checked against `~/.local/state/hb/known_hosts`, so SSH knows
+it's talking to your builder and not something else.
 
-The root `nix-daemon` uses the same host SSH config for `${cfg.hostAlias}`. The
-macOS root process cannot operate the user-owned Apple container runtime
-directly, so the proxy explicitly uses:
+You can use the same path yourself:
 
-```text
-sudo -n -u <runtimeUser> -H ... container machine run ...
+```bash
+ssh nix-builder
 ```
 
-After SSH reaches the guest, Nix connects as the `builder` user. The remote
-program is the guest `nix-daemon` wrapper, which uses passwordless sudo inside
-the guest to run the real Lix daemon as root.
+## When root connects
 
-This removes the old localhost bridge and avoids direct published SSH ports.
+Nix builds are started by the Nix daemon, which runs as root. Apple's
+`container` runtime belongs to your user, and root can't use it directly. So
+when root runs the proxy, the proxy switches to your user before calling
+`container`.
+
+## Inside the machine
+
+SSH logs in as the `builder` user. Nix then starts the machine's own Nix
+daemon through a sudo rule that allows only that one command, and the build
+runs there. When it finishes, Nix copies the results back to your Mac's store
+over the same connection.

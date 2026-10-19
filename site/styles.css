@@ -1,0 +1,349 @@
+/* HexBox: a specimen case for a small Linux machine.
+   Colors come from the logo: the glass case, its slate backdrop, the trident's
+   red, and the platypus's purple bill. One family, Recursive, carries all type:
+   Casual for headings, Linear for text, Mono for code. */
+
+:root {
+  --glass: #e6eff2;
+  --frost: #f7fbfc;
+  --slate: #22333b;
+  --slate-2: #536770;
+  --rule: #c3d3d9;
+  --hex: #c8242b;
+  --hex-ink: #a51d23;
+  --bill: #6e5a93;
+  --code-bg: #22333b;
+  --code-ink: #e3edf1;
+  --on-hex: #fff;
+
+  --casual: "CASL" 1, "MONO" 0;
+  --linear: "CASL" 0, "MONO" 0;
+  --mono: "CASL" 0, "MONO" 1;
+  --font: "Recursive", ui-sans-serif, system-ui, sans-serif;
+
+  /* A classic scale on a 17px base: 14, 17, 21, 24, 36, 48, 60. */
+  --s-1: 0.8235rem;
+  --s0: 1.0625rem;
+  --s1: 1.3125rem;
+  --s2: 1.5rem;
+  --s3: 2.25rem;
+  --s4: 3rem;
+  --s5: 3.75rem;
+
+  --wrap: 70rem;
+  --gutter: clamp(1rem, 4vw, 2.5rem);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --glass: #1b2830;
+    --frost: #22343d;
+    --slate: #e3edf1;
+    --slate-2: #9db2bb;
+    --rule: #34494f;
+    --hex: #f0565b;
+    --hex-ink: #ff8589;
+    --bill: #b7a6da;
+    --plinth: #0f181d;
+    --code-bg: #111b20;
+    --code-ink: #e3edf1;
+    --on-hex: #1b0506;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --glass: #1b2830;
+  --frost: #22343d;
+  --slate: #e3edf1;
+  --slate-2: #9db2bb;
+  --rule: #34494f;
+  --hex: #f0565b;
+  --hex-ink: #ff8589;
+  --bill: #b7a6da;
+  --code-bg: #111b20;
+  --code-ink: #e3edf1;
+  --on-hex: #1b0506;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; scroll-padding-top: 4.5rem; }
+
+body {
+  margin: 0;
+  background: var(--glass);
+  color: var(--slate);
+  font-family: var(--font);
+  font-size: var(--s0);
+  line-height: 1.55;
+  font-variation-settings: var(--linear);
+  -webkit-font-smoothing: antialiased;
+}
+
+img { max-width: 100%; height: auto; display: block; }
+
+a { color: var(--hex-ink); text-underline-offset: 0.2em; text-decoration-thickness: 1px; }
+a:hover { text-decoration-thickness: 2px; }
+
+:focus-visible { outline: 3px solid var(--hex); outline-offset: 3px; border-radius: 3px; }
+
+code, pre { font-family: var(--font); font-variation-settings: var(--mono); font-size: 0.88em; }
+:not(pre) > code { color: var(--bill); }
+
+h1, h2, h3, h4 {
+  margin: 0;
+  font-variation-settings: var(--casual);
+  line-height: 1.12;
+  text-wrap: balance;
+}
+h1 code, h2 code, h3 code, dt code { color: inherit; font-size: 0.92em; }
+
+.wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 var(--gutter); }
+
+.skip { position: absolute; left: -999px; top: 0; }
+.skip:focus { left: 1rem; top: 1rem; z-index: 10; background: var(--frost); padding: 0.5rem 0.75rem; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+/* Header */
+
+.top {
+  position: sticky; top: 0; z-index: 5;
+  background: color-mix(in srgb, var(--glass) 90%, transparent);
+  backdrop-filter: blur(8px);
+}
+.top-inner { display: flex; align-items: center; gap: 1.25rem; min-height: 3.75rem; }
+.brand {
+  display: flex; align-items: center; gap: 0.55rem;
+  color: var(--slate); text-decoration: none;
+  font-size: var(--s1); font-weight: 800;
+  font-variation-settings: var(--casual);
+}
+.top nav { display: flex; gap: clamp(0.9rem, 2.5vw, 1.75rem); margin-left: auto; }
+.top nav a { color: var(--slate-2); text-decoration: none; }
+.top nav a:hover { color: var(--slate); }
+
+/* Shows the current theme, as the docs' toggle does: a sun in light mode, a moon in dark. */
+.theme-toggle {
+  display: grid; place-items: center;
+  width: 2.25rem; height: 2.25rem; flex: none;
+  color: var(--slate); background: transparent;
+  border: 1px solid var(--rule); border-radius: 50%;
+  cursor: pointer;
+}
+.theme-toggle:hover { background: var(--frost); }
+.theme-toggle .i-moon, .theme-toggle[data-current="dark"] .i-sun { display: none; }
+.theme-toggle[data-current="dark"] .i-moon { display: block; }
+html:not(.js) .theme-toggle { display: none; }
+@media (max-width: 40rem) {
+  .top nav a:not([href="#install"]):not([href="docs/"]) { display: none; }
+}
+
+/* The exhibit: the case, with its placard beside it */
+
+.exhibit { padding: clamp(2.5rem, 7vw, 5.5rem) 0 clamp(3.5rem, 8vw, 6.5rem); }
+.exhibit-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: clamp(2rem, 6vw, 5rem);
+  align-items: center;
+}
+@media (max-width: 54rem) { .exhibit-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.case {
+  position: relative;
+  margin: 0;
+  padding: 0 4% 0;
+  isolation: isolate;
+}
+.case img { position: relative; z-index: 1; filter: drop-shadow(0 26px 22px rgb(15 24 29 / 0.28)); }
+/* The page's one moment of motion: light sweeps across the glass on load,
+   then again once a minute. */
+.case::before {
+  content: "";
+  /* Covers the image exactly (the figure's 4% side padding), and the mask
+     limits the light to the case itself, not the background around it. */
+  position: absolute; inset: 0 4%;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 40%, rgb(255 255 255 / 0.75) 47%, rgb(255 255 255 / 0.9) 49%, transparent 56%);
+  background-size: 250% 100%;
+  background-position: 120% 0;
+  -webkit-mask: url(assets/icon.png) center / contain no-repeat;
+  mask: url(assets/icon.png) center / contain no-repeat;
+  opacity: 0;
+}
+/* Each 60s cycle spends its first 1.6s (2.7%) sweeping, then rests out of view. */
+.js .case::before { animation: sheen 60s 0.35s infinite; }
+@keyframes sheen {
+  0% { opacity: 1; background-position: 120% 0; animation-timing-function: ease-out; }
+  2.7% { opacity: 1; background-position: -20% 0; }
+  2.71%, 100% { opacity: 0; background-position: -20% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .js .case::before { animation: none; }
+}
+@media (max-width: 54rem) { .case { max-width: 26rem; } }
+
+h1 {
+  font-size: clamp(var(--s3), 5.2vw, var(--s5));
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+}
+.lede { font-size: var(--s1); line-height: 1.45; color: var(--slate-2); max-width: 34rem; margin: 1.25rem 0 0; }
+
+.placard {
+  margin: 2rem 0 0;
+  max-width: 34rem;
+  background: var(--frost);
+  border: 1px solid var(--rule);
+  border-top: 4px solid var(--hex);
+  border-radius: 2px 2px 6px 6px;
+  padding: 0.35rem 1.25rem;
+}
+.placard div {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  gap: 1rem;
+  padding: 0.6rem 0;
+}
+.placard div + div { border-top: 1px solid var(--rule); }
+.placard dt { font-weight: 700; font-variation-settings: var(--casual); }
+.placard dd { margin: 0; color: var(--slate-2); }
+
+.get { margin-top: 1.75rem; max-width: 34rem; }
+.cmd {
+  display: flex; align-items: center; gap: 0.5rem;
+  container-type: inline-size;
+  background: var(--code-bg); color: var(--code-ink);
+  border-radius: 8px;
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
+}
+/* Sized to keep the 53-character input on one line where it fits (a Mono glyph
+   is 0.6em, so the line is 31.8em; 6.5rem covers padding, gap, and button). */
+.cmd code {
+  flex: 1; min-width: 0; line-height: 1.5;
+  color: var(--code-ink);
+  font-size: clamp(0.72rem, calc((100cqi - 6.5rem) / 31.8), 0.92rem);
+}
+.nowrap { white-space: nowrap; }
+.get-links { display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 1rem 0 0; font-weight: 600; }
+
+.copy {
+  flex: none;
+  font: 700 var(--s-1) var(--font);
+  font-variation-settings: var(--casual);
+  background: var(--hex); color: var(--on-hex);
+  border: 0; border-radius: 5px;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+}
+.copy:hover { background: var(--hex-ink); }
+
+/* Sections */
+
+.section { padding: clamp(3.5rem, 8vw, 6rem) 0; border-top: 1px solid var(--rule); }
+h2 { font-size: clamp(var(--s2), 3.4vw, var(--s3)); font-weight: 800; letter-spacing: -0.01em; }
+h3 { font-size: var(--s1); font-weight: 750; }
+.intro { color: var(--slate-2); max-width: 38rem; margin: 0.85rem 0 0; }
+
+/* What it takes care of: a plain two-column list, no cards. */
+.cares {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2rem clamp(2rem, 5vw, 4rem);
+  margin: 2.25rem 0 0;
+}
+.cares dt { font-size: var(--s1); font-weight: 750; font-variation-settings: var(--casual); }
+.cares dd { margin: 0.4rem 0 0; color: var(--slate-2); max-width: 32rem; }
+@media (max-width: 44rem) { .cares { grid-template-columns: minmax(0, 1fr); } }
+
+/* The build path is a real sequence, so it is numbered. */
+.path { background: var(--frost); }
+.track {
+  list-style: none; counter-reset: hop;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2rem clamp(1.5rem, 4vw, 3rem);
+  padding: 0; margin: 2.5rem 0 0;
+}
+.track li { counter-increment: hop; position: relative; padding-top: 3.25rem; color: var(--slate-2); }
+.track li::before {
+  content: counter(hop);
+  position: absolute; top: 0; left: 0;
+  font-size: var(--s3); line-height: 1; font-weight: 900;
+  font-variation-settings: var(--casual);
+  color: var(--slate);
+}
+.track b { display: block; color: var(--slate); font-weight: 750; font-variation-settings: var(--casual); margin-bottom: 0.25rem; }
+@media (max-width: 54rem) { .track { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 36rem) { .track { grid-template-columns: minmax(0, 1fr); } }
+
+/* Install: three numbered steps, each with its code. */
+.steps { list-style: none; counter-reset: step; padding: 0; margin: 2.25rem 0 0; }
+.steps > li {
+  counter-increment: step;
+  position: relative;
+  padding-left: clamp(3rem, 7vw, 4.5rem);
+  padding-bottom: 2.75rem;
+}
+.steps > li::before {
+  content: counter(step);
+  position: absolute; left: 0; top: -0.2rem;
+  font-size: var(--s3); line-height: 1; font-weight: 900;
+  font-variation-settings: var(--casual);
+  color: var(--slate);
+}
+.steps h3 { margin-bottom: 1rem; }
+.note { color: var(--slate-2); max-width: 46rem; margin: 0.85rem 0 0; font-size: 0.97rem; }
+
+.block {
+  position: relative;
+  margin: 0;
+  background: var(--code-bg); color: var(--code-ink);
+  border-radius: 8px;
+  padding: 1rem 5rem 1rem 1.15rem;
+  font-size: 0.86rem; line-height: 1.6;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.block code { font-size: inherit; }
+.block .copy { position: absolute; top: 0.55rem; right: 0.55rem; }
+
+/* Tabs: without the script every panel shows under its own heading. */
+html:not(.js) .tablist { display: none; }
+.js .panel .no-js { display: none; }
+.panel .no-js { margin: 1rem 0 0.6rem; font-size: var(--s0); }
+.tablist { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.75rem; }
+.tablist button {
+  font: 600 0.95rem var(--font);
+  font-variation-settings: var(--linear);
+  background: transparent; color: var(--slate-2);
+  border: 1px solid var(--rule); border-radius: 999px;
+  padding: 0.35rem 0.9rem; cursor: pointer;
+}
+.tablist button:hover { color: var(--slate); }
+.tablist button[aria-selected="true"] { background: var(--slate); border-color: var(--slate); color: var(--glass); }
+
+/* Fit */
+
+.fit-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 2.5rem clamp(2rem, 5vw, 4rem);
+}
+.fit h2 { font-size: var(--s2); }
+.fit ul { margin: 1rem 0 0; padding-left: 1.1rem; color: var(--slate-2); }
+.fit li { margin-bottom: 0.5rem; }
+.fit li::marker { color: var(--slate-2); }
+@media (max-width: 44rem) { .fit-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* Footer */
+
+.foot { border-top: 1px solid var(--rule); padding: 2.25rem 0 2.75rem; }
+.foot p { margin: 0; }
+.foot-links { display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem; font-weight: 600; }
+.foot .fine { margin-top: 0.75rem; color: var(--slate-2); font-size: var(--s-1); }
+.foot .fine a { color: inherit; }

@@ -1,79 +1,72 @@
 # Options
 
-The main option namespace is `services.container-builder`.
+All options live under `services.container-builder`. For the settings most
+people change, and why, see [Configuration](../getting-started/configuration.md).
 
-Important options:
+## The basics
 
-- `enable`
-- `hostAlias`
-- `sshUser`
-- `containerPort`
-- `workingDirectory`
-- `user`
-- `containerBinary`: defaults to `container`, resolved through PATH; accepts an
-  explicit binary path. Lifecycle scripts preserve PATH when switching to the
-  runtime user and fall back to `/opt/homebrew/bin`, `/usr/local/bin`, and the
-  runtime user's mise shims. A per-project mise install needs an absolute path.
-- `containerName`
-- `imageRepository`
-- `nixVersion`
-- `imageContainerfile`
-- `imageBuildContext`
-- `cpus`
-- `memory`
-- `homeMount`
-- `exposeHostContainerInternal`
-- `systems`
-- `supportedFeatures`
-- `mandatoryFeatures`
-- `maxJobs`
-- `speedFactor`
-- `protocol`
-- `readiness.timeoutSeconds`
-- `readiness.intervalSeconds`
-- `idleShutdown.enable`
-- `idleShutdown.timeoutSeconds`
-- `cli.completions.enable`
+| Option | Default | What it does |
+|---|---|---|
+| `enable` | `false` | Turns the builder on. |
+| `user` | your `nix-darwin` primary user | The macOS user who owns the `container` runtime and the builder. |
+| `containerBinary` | `"container"` | The `container` command to run. A bare name is looked up on your `PATH`, then in `/opt/homebrew/bin`, `/usr/local/bin`, and your mise shims; a full path is used as-is. |
+| `cli.completions.enable` | `false` | Installs bash, zsh, and fish completions for `hb`. |
 
-The `installer.*` and `socktainer.*` options were removed. HexBox no longer
-installs Apple `container` or manages Socktainer, and setting them is an
-evaluation error.
+## The machine
 
-Machine notes:
+| Option | Default | What it does |
+|---|---|---|
+| `cpus` | `4` | CPUs for the builder machine. |
+| `memory` | `"1G"` | Memory for the builder machine, for example `"8G"`. |
+| `homeMount` | `"none"` | Whether the builder can see your home folder: `"none"`, `"ro"` (read-only), or `"rw"`. |
+| `containerName` | `"nix-builder"` | The machine's name in Apple `container`. |
+| `idleShutdown.enable` | `true` | Shuts the builder down when no one is connected. |
+| `idleShutdown.timeoutSeconds` | `300` | How long the builder waits, with no connections, before shutting down. |
 
-- `containerName` is the Apple container machine name.
-- `imageRepository` and `nixVersion` combine into the image reference used by
-  `container machine create`.
-- The default image is published by this repository as
-  `ghcr.io/robertderose/nix-hex-box/hexbox-builder:latest`.
-- Scheduled builds refresh `latest`; image-definition changes also publish
-  `alpine-3.22-lix-2.95.2-2` for pinned use. Builder image publishing is
-  skipped until the configured Lix tag is at least seven days old.
-- Set `imageContainerfile` to build a local custom image instead of pulling the
-  default image. `imageBuildContext` supplies an optional absolute host path to
-  the build context; without it, HexBox builds with an empty generated context.
-  Custom images must also provide `socat`, `base64`, `getent`, and a working
-  `/sbin/init`, because HexBox uses them during bootstrap, SSH proxying, and
-  machine boot.
-- `homeMount` defaults to `none` so the builder does not mount the host home
-  directory.
-- `idleShutdown.timeoutSeconds` controls the guest watchdog that powers the
-  machine off after no active SSH connections remain.
+## The image
 
-Host integration notes:
+| Option | Default | What it does |
+|---|---|---|
+| `imageRepository` | `"ghcr.io/robertderose/nix-hex-box/hexbox-builder"` | Where the builder image comes from. |
+| `nixVersion` | `"latest"` | The image tag. Despite the name, it's the tag of the builder image, not a Nix version. Change it to pin an image, or to rebuild a custom one. |
+| `imageContainerfile` | `null` | A Containerfile to build your own image from. The image must include `socat`, `base64`, `getent`, and a working `/sbin/init`. |
+| `imageBuildContext` | `null` | An absolute path to a folder your Containerfile can copy files from. Without it, the build has an empty context. |
 
-- `exposeHostContainerInternal` defaults to `true` and ensures
-  `host.container.internal` exists through `container system dns`.
-- The Nix builder path uses `ssh-ng` through generated SSH config and
-  `ProxyCommand`; no stable machine IP or published host port is required.
+Changing any of these replaces the builder machine, which empties its `/nix`
+store.
 
-Completion notes:
+## How Nix uses the builder
 
-- `cli.completions.enable` defaults to `false`.
-- When enabled, the module installs bash, zsh, and fish completion files into
-  the standard Nix-managed completion directories.
-- The module does not try to detect the user's shell or edit shell startup
-  files.
+These end up in `nix.buildMachines`.
 
-See `modules/container-builder.nix` for the authoritative option defaults and
-types.
+| Option | Default | What it does |
+|---|---|---|
+| `maxJobs` | `4` | How many builds Nix runs on the builder at once. On M1 and M2 Macs, use 1 or 2. |
+| `speedFactor` | `1` | How strongly Nix prefers this builder over others you have. |
+| `systems` | `[ "aarch64-linux" ]` | What the builder can build. |
+| `supportedFeatures` | `[ "benchmark" "big-parallel" "kvm" "nixos-test" ]` | Build features the builder offers. |
+| `mandatoryFeatures` | `[ ]` | Features a build must ask for to be sent to this builder. |
+| `protocol` | `"ssh-ng"` | The remote store protocol Nix uses. |
+
+## SSH and networking
+
+| Option | Default | What it does |
+|---|---|---|
+| `hostAlias` | `"container-builder"` | The SSH host name Nix uses for the builder. |
+| `sshUser` | `"builder"` | The user Nix logs in as inside the builder. |
+| `containerPort` | `22` | The SSH port inside the builder. |
+| `exposeHostContainerInternal` | `true` | Lets Apple containers reach your Mac at `host.container.internal`. |
+| `readiness.timeoutSeconds` | `60` | How long `hb builder repair` and `hb builder reset` wait for an SSH login to succeed. |
+| `readiness.intervalSeconds` | `1` | How often they try. |
+
+## Files
+
+| Option | Default | What it does |
+|---|---|---|
+| `workingDirectory` | `"~/.local/state/hb"` | Where HexBox keeps its keys, scripts, and logs. See [Files HexBox manages](../architecture/generated-files.md). |
+
+## Removed options
+
+The `installer.*` and `socktainer.*` options were removed when HexBox stopped
+installing Apple `container` and managing Socktainer. Setting any of them stops
+your configuration from building, with a message saying what to do instead.

@@ -1,43 +1,47 @@
-# Generated Files
+# Files HexBox manages
 
-Activation writes the operational helper files into `~/.local/state/hb`.
+HexBox keeps its files in `~/.local/state/hb`. Every switch rewrites the
+scripts and SSH configuration there from your Nix configuration, so don't edit
+them by hand; change your configuration instead.
 
-Important files include:
+## Keys
 
-- `bootstrap-keys.sh`
-- `bootstrap-machine.sh`
-- `builder-image/Containerfile` when `imageContainerfile` is set
-- `proxy.sh`
-- `start-container.sh`
-- `stop-container.sh`
-- `reset-container.sh`
-- `ssh-wrapper.sh`
-- `ssh_config`
-- `ssh_config_root`
-- `known_hosts`
-- `machine-generation`
-- `hexbox-readiness.log`
-- `hb`
+These are created once by `bootstrap-keys.sh` and never overwritten:
 
-These files are the practical runtime interface to the builder. They are
-generated from the active Nix configuration and should not be edited manually.
+| File | What it is |
+|---|---|
+| `builder_ed25519`, `builder_ed25519.pub` | The key Nix logs in to the builder with |
+| `ssh_host_ed25519_key`, `ssh_host_ed25519_key.pub` | The builder's own host key |
+| `known_hosts` | Lets SSH check it's talking to your builder |
 
-By default, the builder image is pulled from GHCR. When
-`services.container-builder.imageContainerfile` is set, activation copies that
-Containerfile here and `hb builder repair` / `start-container.sh` build the
-custom image locally when its tag is missing. If `imageBuildContext` is set, it
-must be an absolute host path string and is passed directly to Apple
-`container build`.
+Deleting the keys locks your Mac out of the builder. If you need new keys,
+delete them, run `bootstrap-keys.sh` again, and then `hb builder reset`, so
+the machine is recreated with the new keys.
 
-`machine-generation` records the image contract used to create the current
-Apple container machine. If it differs from the active Nix configuration,
-`start-container.sh` recreates the machine, deleting the guest-local `/nix`
-store.
+## Scripts
 
-The repository copy of `assets/hb.sh` is also generated. Edit `scripts/hb.sh`
-and regenerate `assets/hb.sh` instead of changing the built helper directly.
+| File | What it does |
+|---|---|
+| `bootstrap-keys.sh` | Creates the keys above |
+| `start-container.sh` | Starts the builder, creating or updating it as needed |
+| `stop-container.sh` | Stops the builder |
+| `reset-container.sh` | Deletes the builder and creates a fresh one |
+| `bootstrap-machine.sh` | Sets up a new machine (used by `start-container.sh`) |
+| `proxy.sh` | The SSH `ProxyCommand` described in [How Nix reaches the builder](./networking.md) |
+| `ssh-wrapper.sh` | Runs SSH with HexBox's configuration |
+| `reconcile-host-container-internal.sh` | Creates or removes the `host.container.internal` name |
 
-The checked-in shell completion assets under `assets/completions/` are part of
-the `hb` distribution path. The module installs them through Nix's
-`installShellCompletion` hook into the standard shell completion directories
-instead of mutating user shell dotfiles.
+## Configuration and state
+
+| File | What it is |
+|---|---|
+| `ssh_config`, `ssh_config_root` | SSH settings for the two builder host names |
+| `machine-generation` | Which image the current machine was built from; a mismatch makes HexBox recreate it |
+| `hexbox-readiness.log` | What `hb builder repair` and `hb builder reset` saw while waiting for SSH |
+| `builder-image/Containerfile` | A copy of your Containerfile, if you set `imageContainerfile` |
+
+## Elsewhere
+
+- `/usr/local/bin/hb` is the `hb` helper.
+- `/etc/ssh/ssh_config.d/201-container-builder.conf` makes `ssh nix-builder`
+  work from any terminal, and lets the Nix daemon find the builder.

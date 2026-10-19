@@ -49,8 +49,12 @@ custom image instead.
   inside the guest.
 - Boot-time guest preparation provisions the standard `nixbld` build users and
   makes `/dev/net/tun` available to Lix sandbox networking.
-- When idle shutdown is enabled, a guest watchdog watches active SSH
-  connections and stops `sshd` after the configured timeout, which powers the machine off.
+- When idle shutdown is enabled, a guest watchdog checks for established SSH
+  connections every 30 seconds. Once none have existed for the configured
+  timeout, it signals the guest's init (PID 1), which powers the machine off.
+- The SSH proxy waits up to 30 seconds for guest `sshd` to accept connections.
+  The full SSH-login readiness check, bounded by `readiness.timeoutSeconds`,
+  runs only in `hb builder repair` and `hb builder reset`.
 
 ## Helper Commands
 
@@ -62,6 +66,7 @@ The `hb` helper exposes:
 - `hb builder reset`
 - `hb builder ssh`
 - `hb builder inspect`
+- `hb builder gc`
 - `hb builder logs readiness`
 - `hb builder logs boot`
 - `hb builder logs idle`

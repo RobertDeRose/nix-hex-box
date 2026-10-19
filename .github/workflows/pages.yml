@@ -1,4 +1,4 @@
-name: Deploy docs to GitHub Pages
+name: Deploy site to GitHub Pages
 
 on:
   push:
@@ -16,6 +16,8 @@ concurrency:
 
 jobs:
   deploy:
+    # Publishes the static product page in site/ at the root, with the
+    # Docusaurus docs built from docs/ beneath it at /docs/.
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -28,14 +30,15 @@ jobs:
         with:
           install: false
 
-      - name: Build docs
+      - name: Build site
         run: |
-          mise x mdbook@0.5.2 -- bash -c 'cd docs && mdbook build'
+          mise install node
+          mise run pages:build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: book
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment

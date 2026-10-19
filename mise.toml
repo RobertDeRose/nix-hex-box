@@ -8,7 +8,6 @@ argc = "latest"
 actionlint = "latest"
 hadolint = "latest"
 hk = { version = "1.41", arch = "aarch64" }
-mdbook = "0.5.2"
 node = "lts"
 pkl = "latest"
 shellcheck = "latest"
@@ -31,14 +30,15 @@ HK_MISE = 1
 postinstall = "command -v hk >/dev/null && hk install --mise || true"
 
 [tasks."docs:build"]
-description = "Build the documentation site (mdBook)"
+description = "Build the Docusaurus documentation site"
 quiet = true
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
 
 cd docs
-mdbook build
+npm ci --no-audit --no-fund
+npm run build
 '''
 
 [tasks."docs:serve"]
@@ -52,5 +52,38 @@ set -euo pipefail
 PORT="${usage_port:-3000}"
 
 cd docs
-mdbook serve --port "$PORT"
+npm ci --no-audit --no-fund
+npm start -- --port "$PORT"
+'''
+
+[tasks."pages:build"]
+description = "Assemble the GitHub Pages site: the product page with the docs under docs/"
+depends = ["docs:build"]
+quiet = true
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+rm -rf _site
+cp -R site _site
+cp -R docs/build _site/docs
+'''
+
+[tasks."pages:serve"]
+description = "Serve the assembled Pages site at its GitHub Pages path"
+depends = ["pages:build"]
+quiet = true
+usage = 'arg "[port]" help="Port to serve on" default="8000"'
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+PORT="${usage_port:-8000}"
+
+# GitHub Pages serves this project under /nix-hex-box/, and the docs depend on that base path.
+preview=$(mktemp -d)
+trap 'rm -rf "$preview"' EXIT
+ln -s "$PWD/_site" "$preview/nix-hex-box"
+echo "Serving http://localhost:$PORT/nix-hex-box/"
+python3 -m http.server "$PORT" --bind 127.0.0.1 --directory "$preview"
 '''

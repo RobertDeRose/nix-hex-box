@@ -1,47 +1,26 @@
 # HexBox
 
 <p align="center">
-  <img src="assets/logo.png" alt="HexBox logo" width="240" />
+  <img src="assets/logo.png" alt="The HexBox mascot, a platypus in devil horns, inside a glass box" width="240" />
 </p>
 
-`nix-hex-box` is a `nix-darwin` module that configures an Apple
-`container machine` backed `aarch64-linux` remote builder for Nix.
+HexBox gives Nix on your Mac a way to build Linux packages. It's a
+`nix-darwin` module that runs a small `aarch64-linux` machine using Apple's
+`container` tool, and tells Nix to send Linux builds there. The machine boots
+when a build needs it, shuts itself down when idle, and keeps its `/nix` store
+in between.
 
-Documentation site:
+- Website: <https://robertderose.github.io/nix-hex-box/>
+- Documentation: <https://robertderose.github.io/nix-hex-box/docs/>
 
-- <https://robertderose.github.io/nix-hex-box/>
+## Quick start
 
-Current design highlights:
+You need an Apple silicon Mac, a flake-based `nix-darwin` configuration, and
+Apple's `container`, installed however you like (`brew install container`,
+`mise use -g container`, or Apple's package) and started with
+`container system start`.
 
-- uses the Apple `container` CLI you install yourself (Homebrew, mise, or Apple's pkg)
-- pulls the published Alpine/Lix-based builder image by default, with an optional local custom image build
-- creates a persistent Apple `container machine` instead of an ephemeral container
-- configures `nix.buildMachines` for `ssh-ng://container-builder`
-- uses `ProxyCommand` to auto-start the machine and relay SSH to guest `sshd`
-- lets the macOS root `nix-daemon` sudo back to the runtime-owning user for the Apple container command
-- connects as the guest `builder` user and uses a narrow passwordless sudo wrapper for the remote `nix-daemon`
-- keeps the guest `/nix` store persistent across machine stops and starts
-- powers the guest off after a configurable idle timeout with no active SSH connections
-- manages durable host state under `~/.local/state/hb`
-- installs host-side SSH aliases for both `nix-builder` and `container-builder`
-- writes a generated `known_hosts` file under `~/.local/state/hb` so SSH verifies the builder host key
-- exposes `host.container.internal` for Apple containers by default via `container system dns`
-- waits for a real SSH handshake before considering the builder ready
-
-## Module
-
-The flake exports:
-
-- `darwinModules.default`
-- `darwinModules.container-builder`
-
-## Requirements
-
-HexBox does not install Apple `container`. Install it any way you like
-(Homebrew, mise, or Apple's pkg) and keep it on `PATH`. Activation prints an
-error when `container` is missing.
-
-## Example
+Add HexBox to your flake:
 
 ```nix
 {
@@ -55,11 +34,7 @@ error when `container` is missing.
         {
           services.container-builder = {
             enable = true;
-            cpus = 4;
             memory = "8G";
-            maxJobs = 4;
-            # Optional override if you do not want to use config.system.primaryUser.
-            user = "myuser";
           };
         }
       ];
@@ -68,121 +43,42 @@ error when `container` is missing.
 }
 ```
 
-## Status
-
-This module is functional but still in progress.
-
-Known open areas:
-
-- evaluating a smaller systemd-based image once Apple `container machine` handles
-  larger systemd images reliably
-
-## Runtime
-
-The module uses the HexBox builder image published by this repository by default:
-
-```text
-ghcr.io/robertderose/nix-hex-box/hexbox-builder:latest
-```
-
-The image contains Alpine 3.22, OpenSSH, sudo, and Lix. The module creates a
-persistent Apple container machine from that image and bootstraps the
-host-specific SSH keys, `nix.conf`, sudoers rule, and idle timeout.
-
-GitHub Actions rebuilds and publishes `latest` weekly so Alpine package
-updates, such as OpenSSH fixes, are available to new or recreated machines. When the configured machine image
-contract changes, HexBox recreates the builder machine automatically; this also
-deletes the guest-local store.
-Builder image publishing is skipped until the configured Lix tag is at least
-seven days old. When the image definition changes on `main`, the workflow also
-publishes the versioned release tag `alpine-3.22-lix-2.95.2-2` for users who
-prefer to pin.
-
-The builder uses `ssh-ng`. The host SSH path is a generated `ProxyCommand` that
-runs Apple `container machine run --root -i ... socat STDIO TCP:127.0.0.1:<containerPort>`,
-so the machine starts on demand, IP changes do not affect Nix, and the relay
-closes cleanly when SSH finishes. Custom `imageContainerfile` images must
-include `socat`, or builder bootstrap will fail the SSH proxy preflight.
-
-The guest `/nix` store lives in the machine's persistent storage. Startup uses
-Apple Container's normal machine-create boot path for first-time user setup, then
-uses a bounded `machine run ... true` probe so stale machine state is retried
-instead of trusted from status alone. Stop/start keeps build outputs and downloaded
-substitutes. `hb builder reset` deletes and recreates the machine, which also
-removes the guest-local store.
-
-Available image options:
-
-- `services.container-builder.imageRepository`
-- `services.container-builder.nixVersion`
-- `services.container-builder.imageContainerfile`
-- `services.container-builder.imageBuildContext`
-
-Set `imageContainerfile` to build and use a local custom image instead of the
-published GHCR image. Set `imageBuildContext` to an absolute host path string
-when the custom image needs a build context. Custom images must provide
-`socat`, `base64`, `getent`, and a working `/sbin/init`, because HexBox
-bootstrap, machine boot, and the SSH proxy all use those entrypoints. Bump
-`nixVersion` or remove the local image when the Containerfile or context
-changes.
-
-Available machine options:
-
-- `services.container-builder.cpus`
-- `services.container-builder.memory`
-- `services.container-builder.homeMount`
-- `services.container-builder.idleShutdown.enable`
-- `services.container-builder.idleShutdown.timeoutSeconds`
-
-Available host/container integration options:
-
-- `services.container-builder.exposeHostContainerInternal`
-
-The builder machine writes a minimal `nix.conf` with
-`https://cache.nixos.org/` configured as a substituter. Bootstrap provisions the
-standard `nixbld` group and build users, then prepares `/dev/net/tun` on every
-boot so Lix sandbox networking can start `pasta` reliably.
-
-Example:
-
-```nix
-services.container-builder = {
-  enable = true;
-};
-```
-
-## Helper
-
-The helper runs `container` from your shell's `PATH`, so it uses the host CLI
-selected by Homebrew, mise, or Apple's installer. Lifecycle scripts also resolve
-`container` through PATH by default and preserve it when switching to the runtime
-user. Background calls fall back to `/opt/homebrew/bin`, `/usr/local/bin`, and
-the runtime user's mise shims. Set `services.container-builder.containerBinary`
-to override the command explicitly.
-
-If you install `container` with mise, install it globally
-(`mise use -g container`) so background calls resolve the same version from
-any directory. A per-project mise install is not visible to nix-daemon or
-activation; set `containerBinary` to its absolute path instead, for example the
-output of `mise which container`.
-
-After activation, use:
+Then switch, create the builder's SSH keys once, and try a build:
 
 ```bash
-hb builder status
+sudo darwin-rebuild switch --flake .#my-host
+~/.local/state/hb/bootstrap-keys.sh
 hb builder repair
 hb builder test
-hb builder ssh
-hb builder logs boot
-hb builder logs idle
-hb doctor
 ```
 
-`hb builder repair` ensures the Apple container system is healthy, builds a
-custom local OCI image when configured and missing, creates or updates the
-container machine, verifies SSH, checks outbound connectivity, and pings the
-remote store. If repair fails, follow the reported recovery step for the
-runtime, machine, or network failure that was detected.
-After repair succeeds, run `hb builder test` to verify remote build execution.
+The first `hb builder repair` downloads the builder image, so it takes a few
+minutes. The [installation guide](https://robertderose.github.io/nix-hex-box/docs/getting-started/installation)
+explains each step.
 
-See `docs/spec.md` for the detailed design notes.
+## Status
+
+HexBox works, but it's young. A smaller,
+systemd-based builder image is planned once Apple's `container` runs larger
+systemd images reliably.
+
+## The builder image
+
+By default, the builder runs `ghcr.io/robertderose/nix-hex-box/hexbox-builder:latest`:
+Alpine 3.22 with OpenSSH, sudo, and Lix. GitHub Actions rebuilds `latest`
+weekly, so Alpine security fixes reach new and recreated machines. A rebuild is
+skipped until the Lix release it uses is at least seven days old. When the
+image definition changes on `main`, the workflow also publishes a versioned tag,
+such as `alpine-3.22-lix-2.95.2-2`, for anyone who wants to pin one.
+
+## Working on HexBox
+
+- The module is `modules/container-builder.nix`. The flake exports it as both
+  `darwinModules.default` and `darwinModules.container-builder`.
+- The `hb` helper's source is `scripts/hb.sh`. `assets/hb.sh` is built from it
+  with `argc --argc-build`; edit the script, not the built copy.
+- The website is plain HTML in `site/`. The documentation is a Docusaurus site
+  in `docs/`, with its pages in `docs/src`. `mise run pages:build` assembles
+  both into `_site/` the way GitHub Pages publishes them, and
+  `mise run pages:serve` previews the result.
+- `docs/spec.md` describes the design in more detail.

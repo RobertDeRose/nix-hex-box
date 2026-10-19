@@ -17,7 +17,9 @@ local linters = new Mapping<String, Step> {
   ["check_case_conflict"] = Builtins.check_case_conflict
   ["check_executables_have_shebangs"] = Builtins.check_executables_have_shebangs
   ["check_symlinks"] = Builtins.check_symlinks
-  ["check-added-large-files"] = Builtins.check_added_large_files
+  ["check-added-large-files"] = (Builtins.check_added_large_files) {
+    exclude = List("docs/package-lock.json")
+  }
   ["check-exec-shebangs"] = Builtins.check_executables_have_shebangs
   ["check-merge-conflict"] = Builtins.check_merge_conflict
   ["detect-private-key"] = Builtins.detect_private_key
