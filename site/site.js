@@ -7,10 +7,14 @@ document.documentElement.classList.add('js');
   const button = document.querySelector('.theme-toggle');
   const system = matchMedia('(prefers-color-scheme: dark)');
   const current = () => root.dataset.theme || (system.matches ? 'dark' : 'light');
+  const tint = document.querySelector('meta[name="theme-color"]');
   const show = () => {
     const theme = current();
     button.dataset.current = theme;
     button.setAttribute('aria-label', `Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`);
+    // Safari tints its toolbar from theme-color and doesn't follow the page's
+    // own color changes, so keep the tag on the current page background.
+    tint.content = getComputedStyle(root).getPropertyValue('--glass').trim();
   };
   button.addEventListener('click', () => {
     const next = current() === 'dark' ? 'light' : 'dark';

@@ -34,6 +34,7 @@ const config: Config = {
 
   // Site code lives in site/ because src/ is the documentation content.
   staticDirectories: ['site/static'],
+  clientModules: ['./site/client/theme-color.ts'],
 
   presets: [
     [
