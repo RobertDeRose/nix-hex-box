@@ -1,5 +1,6 @@
 ---
 slug: /
+description: HexBox is a nix-darwin module that keeps an aarch64-linux Nix builder in an Apple container machine on your Mac.
 ---
 
 # Introduction

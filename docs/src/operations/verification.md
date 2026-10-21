@@ -1,3 +1,7 @@
+---
+description: Use the hb command to check the builder, repair it, and run a real build through it.
+---
+
 # Checking and repairing the builder
 
 The `hb` command is how you look after the builder. Most days you won't need

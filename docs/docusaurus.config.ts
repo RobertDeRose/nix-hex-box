@@ -55,6 +55,13 @@ const config: Config = {
 
   themeConfig: {
     image: 'img/icon.png',
+    metadata: [
+      // The share image is the square mascot, so ask for the small card;
+      // Docusaurus defaults to a wide one that crops it.
+      {name: 'twitter:card', content: 'summary'},
+      {property: 'og:site_name', content: 'HexBox'},
+      {property: 'og:image:alt', content: 'The HexBox mascot: a platypus in devil horns holding a trident, inside a glass case.'},
+    ],
     colorMode: {respectPrefersColorScheme: true},
     navbar: {
       title: 'HexBox',
