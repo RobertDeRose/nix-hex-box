@@ -1,3 +1,7 @@
+---
+description: Go from nothing to a working Linux build with HexBox in about ten minutes, most of it waiting for the first image download.
+---
+
 # Installation
 
 This page takes you from nothing to a working Linux build. Plan on about ten

@@ -1,10 +1,11 @@
 ---
 slug: /
+description: HexBox is a nix-darwin module that keeps an aarch64-linux Nix builder in an Apple container machine on your Mac.
 ---
 
 # Introduction
 
-![The HexBox mascot, a platypus in devil horns, inside a glass box](/img/icon.png)
+![Hex the platypus, in devil horns, packing source files into Git and Helix packages inside a glass display case.](/img/icon.png)
 
 HexBox gives Nix on your Mac a way to build Linux packages. It's a
 `nix-darwin` module that runs a small `aarch64-linux` machine using Apple's

@@ -1,3 +1,7 @@
+---
+description: The scripts, SSH configuration, and keys HexBox keeps in ~/.local/state/hb, and which ones each switch rewrites.
+---
+
 # Files HexBox manages
 
 HexBox keeps its files in `~/.local/state/hb`. Every switch rewrites the

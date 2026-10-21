@@ -1,3 +1,7 @@
+---
+description: Fixes for common HexBox problems, starting from what you see.
+---
+
 # Troubleshooting
 
 Each section starts with what you see. If yours isn't here, run

@@ -1,3 +1,7 @@
+---
+description: How Nix reaches the builder over SSH, when container-builder is a script that wakes the machine rather than a network address.
+---
+
 # How Nix reaches the builder
 
 Nix talks to the builder the way it talks to any remote builder: over SSH,

@@ -34,6 +34,7 @@ const config: Config = {
 
   // Site code lives in site/ because src/ is the documentation content.
   staticDirectories: ['site/static'],
+  clientModules: ['./site/client/theme-color.ts'],
 
   presets: [
     [
@@ -54,6 +55,13 @@ const config: Config = {
 
   themeConfig: {
     image: 'img/icon.png',
+    metadata: [
+      // The share image is the square mascot, so ask for the small card;
+      // Docusaurus defaults to a wide one that crops it.
+      {name: 'twitter:card', content: 'summary'},
+      {property: 'og:site_name', content: 'HexBox'},
+      {property: 'og:image:alt', content: 'Hex the platypus, in devil horns, packing source files into Git and Helix packages inside a glass display case.'},
+    ],
     colorMode: {respectPrefersColorScheme: true},
     navbar: {
       title: 'HexBox',

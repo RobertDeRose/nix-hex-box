@@ -1,3 +1,7 @@
+---
+description: Where to find the HexBox logs, and what each one tells you when hb builder repair isn't enough.
+---
+
 # Logs
 
 When something goes wrong, `hb builder repair` usually says where. These logs

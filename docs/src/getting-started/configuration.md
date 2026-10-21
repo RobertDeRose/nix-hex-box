@@ -1,3 +1,7 @@
+---
+description: The HexBox settings most people change, from memory and CPUs to the idle timeout and a custom builder image.
+---
+
 # Configuration
 
 Every setting lives under `services.container-builder`. Only `enable` is

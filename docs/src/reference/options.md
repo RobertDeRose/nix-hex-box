@@ -1,3 +1,7 @@
+---
+description: Every HexBox option under services.container-builder, with its default and what it does.
+---
+
 # Options
 
 All options live under `services.container-builder`. For the settings most

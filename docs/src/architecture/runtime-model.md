@@ -1,3 +1,7 @@
+---
+description: "The builder is a persistent Apple container machine: it keeps its disk when it stops, so it can sleep when idle without losing work."
+---
+
 # The builder machine
 
 The builder is an Apple `container` machine named `nix-builder`. Unlike an
