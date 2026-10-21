@@ -1,7 +1,7 @@
 # HexBox
 
 <p align="center">
-  <img src="assets/logo.png" alt="The HexBox mascot, a platypus in devil horns, inside a glass box" width="240" />
+  <img src="assets/logo.png" alt="Hex the platypus, in devil horns, packing source files into Git and Helix packages inside a glass display case." width="240" />
 </p>
 
 HexBox gives Nix on your Mac a way to build Linux packages. It's a

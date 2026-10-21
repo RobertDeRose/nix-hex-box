@@ -60,7 +60,7 @@ const config: Config = {
       // Docusaurus defaults to a wide one that crops it.
       {name: 'twitter:card', content: 'summary'},
       {property: 'og:site_name', content: 'HexBox'},
-      {property: 'og:image:alt', content: 'The HexBox mascot: a platypus in devil horns holding a trident, inside a glass case.'},
+      {property: 'og:image:alt', content: 'Hex the platypus, in devil horns, packing source files into Git and Helix packages inside a glass display case.'},
     ],
     colorMode: {respectPrefersColorScheme: true},
     navbar: {
