@@ -54,13 +54,11 @@ const config: Config = {
   ],
 
   themeConfig: {
-    image: 'img/icon.png',
+    // The product page publishes the wide share image; the docs reuse it.
+    image: 'https://robertderose.github.io/nix-hex-box/assets/social-preview.png',
     metadata: [
-      // The share image is the square mascot, so ask for the small card;
-      // Docusaurus defaults to a wide one that crops it.
-      {name: 'twitter:card', content: 'summary'},
       {property: 'og:site_name', content: 'HexBox'},
-      {property: 'og:image:alt', content: 'Hex the platypus, in devil horns, packing source files into Git and Helix packages inside a glass display case.'},
+      {property: 'og:image:alt', content: 'HexBox: Hex the Platypus, a Linux builder for Nix that naps in an Apple container on your Mac, shown packing Git and Helix packages inside a glass display case.'},
     ],
     colorMode: {respectPrefersColorScheme: true},
     navbar: {
